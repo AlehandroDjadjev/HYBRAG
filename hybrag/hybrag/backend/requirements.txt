@@ -1,0 +1,13 @@
+Django>=5.0,<6.0
+djangorestframework>=3.14,<4.0
+django-cors-headers>=4.3,<5.0
+Pillow>=10.3,<11.0
+transformers>=4.41,<5.0
+torch>=2.3,<3.0
+accelerate>=0.31,<1.0
+python-dotenv>=1.0,<2.0
+pinecone-client>=3.0.0,<4.0.0
+sentencepiece>=0.2.0,<0.3.0
+pyspellchecker>=0.8,<1.0
+datasets>=2.20,<3.0
+torchvision>=0.18,<1.0
