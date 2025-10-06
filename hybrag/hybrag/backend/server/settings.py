@@ -93,3 +93,8 @@ PINECONE_REGION = os.getenv('PINECONE_REGION', 'us-east-1')
 # Embeddings
 SIGLIP_MODEL_NAME = os.getenv('SIGLIP_MODEL_NAME', 'google/siglip2-giant-opt-patch16-384')
 DEVICE = os.getenv('DEVICE', 'auto')
+
+# SageMaker
+SAGEMAKER_ENDPOINT_NAME = os.getenv('SAGEMAKER_ENDPOINT_NAME')
+SAGEMAKER_RUNTIME_REGION = os.getenv('SAGEMAKER_RUNTIME_REGION') or os.getenv('AWS_REGION')
+EMBEDDINGS_PROVIDER = os.getenv('SIGLIP_PROVIDER', 'local')  # 'local' or 'sagemaker'
