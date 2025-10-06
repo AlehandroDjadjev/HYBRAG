@@ -1,47 +1,52 @@
 from __future__ import annotations
-from transformers import AutoProcessor, AutoModel
-import torch
-from PIL import Image
-import io
-from typing import Union, List
+from typing import List
+from django.conf import settings
+import json
+import boto3
+from botocore.config import Config
+
 
 class SiglipService:
 	def __init__(self, model_name: str | None = None, device: str | None = None):
-		# Exact model per spec
-		self.model_name = model_name or 'google/siglip2-giant-opt-patch16-384'
-		# Load model and processor; device_map='auto' for local GPU/CPU placement
-		self.model = AutoModel.from_pretrained(self.model_name, device_map='auto').eval()
-		self.processor = AutoProcessor.from_pretrained(self.model_name)
-		# SigLIP2 Giant outputs 1536-dim embeddings for image and text
-		self.dim = 1536
+		# Ignore local model; use SageMaker endpoint per settings
+		self.dim = int(getattr(settings, 'OS_EMB_DIM', 1536))
+		endpoint = getattr(settings, 'SAGEMAKER_ENDPOINT_NAME', None)
+		region = getattr(settings, 'SAGEMAKER_RUNTIME_REGION', None) or getattr(settings, 'AWS_REGION', None)
+		if not endpoint:
+			raise RuntimeError('SAGEMAKER_ENDPOINT_NAME not set')
+		if not region:
+			raise RuntimeError('SAGEMAKER_RUNTIME_REGION or AWS_REGION not set')
+		self.endpoint = endpoint
+		self.client = boto3.client(
+			'sagemaker-runtime',
+			config=Config(
+				region_name=region,
+				retries={"max_attempts": 3, "mode": "standard"},
+				read_timeout=12,
+				connect_timeout=3,
+			)
+		)
 
-	@torch.no_grad()
-	def image_embed(self, file_or_bytes: Union[bytes, bytearray, io.BytesIO, str]) -> list[float]:
-		if isinstance(file_or_bytes, (bytes, bytearray)):
-			image = Image.open(io.BytesIO(file_or_bytes)).convert('RGB')
-		else:
-			image = Image.open(file_or_bytes).convert('RGB')
-		inputs = self.processor(images=[image], return_tensors='pt')
-		inputs = inputs.to(self.model.device)
-		emb = self.model.get_image_features(**inputs)
-		return emb.squeeze(0).cpu().tolist()
+	def _invoke(self, payload: dict) -> list[float]:
+		resp = self.client.invoke_endpoint(
+			EndpointName=self.endpoint,
+			ContentType='application/json',
+			Accept='application/json',
+			Body=json.dumps(payload).encode('utf-8'),
+		)
+		body = json.loads(resp['Body'].read())
+		vec = body.get('embedding')
+		if not isinstance(vec, list):
+			raise RuntimeError(f'Bad response from SageMaker endpoint: {body}')
+		return vec
 
-	@torch.no_grad()
-	def image_embed_batch(self, files_or_bytes: List[Union[bytes, bytearray, io.BytesIO, str]]) -> List[List[float]]:
-		images = []
-		for f in files_or_bytes:
-			if isinstance(f, (bytes, bytearray)):
-				images.append(Image.open(io.BytesIO(f)).convert('RGB'))
-			else:
-				images.append(Image.open(f).convert('RGB'))
-		inputs = self.processor(images=images, return_tensors='pt')
-		inputs = inputs.to(self.model.device)
-		emb = self.model.get_image_features(**inputs)
-		return emb.cpu().tolist()
+	def image_embed(self, file_path: str) -> list[float]:
+		# This code used to load image locally. Now assume image is accessible via URL.
+		# For backward compatibility, we keep signature but raise to avoid silently reading local files.
+		raise RuntimeError('Local image embedding disabled. Use presigned S3 GET and image_url via the ingestion flow.')
 
-	@torch.no_grad()
+	def image_embed_batch(self, file_paths: List[str]) -> List[List[float]]:
+		raise RuntimeError('Local batch embedding disabled. Use S3 presigned URLs and invoke per image or batch upstream.')
+
 	def text_embed(self, text: str) -> list[float]:
-		inputs = self.processor(text=[text], return_tensors='pt', padding='max_length', max_length=64)
-		inputs = inputs.to(self.model.device)
-		emb = self.model.get_text_features(**inputs)
-		return emb.squeeze(0).cpu().tolist()
+		return self._invoke({"text": text, "normalize": True})

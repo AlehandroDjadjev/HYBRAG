@@ -98,3 +98,17 @@ DEVICE = os.getenv('DEVICE', 'auto')
 SAGEMAKER_ENDPOINT_NAME = os.getenv('SAGEMAKER_ENDPOINT_NAME')
 SAGEMAKER_RUNTIME_REGION = os.getenv('SAGEMAKER_RUNTIME_REGION') or os.getenv('AWS_REGION')
 EMBEDDINGS_PROVIDER = os.getenv('SIGLIP_PROVIDER', 'local')  # 'local' or 'sagemaker'
+AWS_REGION = os.getenv('AWS_REGION', SAGEMAKER_RUNTIME_REGION or 'eu-north-1')
+
+# S3 (presigned URLs)
+S3_BUCKET = os.getenv('S3_BUCKET', '')
+S3_PRESIGN_EXPIRE = int(os.getenv('S3_PRESIGN_EXPIRE', '3600'))
+
+# OpenSearch
+OS_HOST = os.getenv('OS_HOST', '')  # e.g., https://search-... or https://<vpce>...
+OS_USERNAME = os.getenv('OS_USERNAME', '')
+OS_PASSWORD = os.getenv('OS_PASSWORD', '')
+OS_USE_IAM = os.getenv('OS_USE_IAM', '1') == '1'
+OS_INDEX = os.getenv('OS_INDEX', 'media-embeddings')
+OS_EMB_DIM = int(os.getenv('OS_EMB_DIM', '1536'))
+OS_K = int(os.getenv('OS_K', '10'))

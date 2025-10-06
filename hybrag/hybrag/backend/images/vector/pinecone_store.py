@@ -1,50 +1,99 @@
 from __future__ import annotations
 from typing import List, Optional, Dict, Any
-from pinecone import Pinecone
-from pinecone.core.client.exceptions import NotFoundException
+import os
+from opensearchpy import OpenSearch, RequestsHttpConnection
+from requests_aws4auth import AWS4Auth
+import boto3
 
 class VectorStore:
-	def __init__(self, api_key: str, environment: Optional[str], index_name: str, dim: int, host: Optional[str] = None):
-		self.pc = Pinecone(api_key=api_key)
+	def __init__(self, api_key: str = '', environment: Optional[str] = None, index_name: str = 'media-embeddings', dim: int = 1536, host: Optional[str] = None):
+		# Repurpose to OpenSearch. Ignore Pinecone args except index_name and dim.
 		self.index_name = index_name
 		self.dim = dim
-		if host:
-			self.index = self.pc.Index(host=host)
+		os_host = os.getenv('OS_HOST') or host
+		if not os_host:
+			raise RuntimeError('OS_HOST must be set to use OpenSearch')
+		use_iam = (os.getenv('OS_USE_IAM', '1') == '1')
+		region = os.getenv('AWS_REGION', 'eu-north-1')
+		if use_iam:
+			session = boto3.Session()
+			creds = session.get_credentials()
+			if creds is None:
+				raise RuntimeError('No AWS credentials for OpenSearch IAM auth')
+			awsauth = AWS4Auth(creds.access_key, creds.secret_key, region, 'es', session_token=creds.token)
+			self.client = OpenSearch(
+				hosts=[os_host],
+				http_auth=awsauth,
+				use_ssl=True,
+				verify_certs=True,
+				connection_class=RequestsHttpConnection,
+				timeout=10,
+				max_retries=3,
+				retry_on_timeout=True,
+			)
 		else:
-			try:
-				self.index = self.pc.Index(self.index_name)
-			except Exception as e:
-				raise RuntimeError(
-					"Pinecone index not found. Either set PINECONE_HOST for a serverless index host URL "
-					"or pre-create the index in your project and ensure PINECONE_INDEX matches."
-				) from e
+			user = os.getenv('OS_USERNAME', '')
+			pwd = os.getenv('OS_PASSWORD', '')
+			self.client = OpenSearch(
+				hosts=[os_host],
+				http_auth=(user, pwd),
+				use_ssl=True,
+				verify_certs=True,
+				connection_class=RequestsHttpConnection,
+				timeout=10,
+				max_retries=3,
+				retry_on_timeout=True,
+			)
+		self._ensure_index()
 
-	def _ensure_dim(self, vector: List[float]) -> None:
-		if len(vector) != int(self.dim):
-			raise ValueError(f"Vector length {len(vector)} does not match expected dim {self.dim}. Check model/index config.")
+	def _ensure_index(self) -> None:
+		if self.client.indices.exists(index=self.index_name):
+			return
+		body = {
+			"settings": {"index": {"knn": True}},
+			"mappings": {
+				"properties": {
+					"id": {"type": "keyword"},
+					"building": {"type": "keyword"},
+					"shot_date": {"type": "keyword"},
+					"shot_ymd": {"type": "integer"},
+					"image_url": {"type": "keyword"},
+					"notes": {"type": "text"},
+					"embedding": {
+						"type": "knn_vector",
+						"dimension": self.dim,
+						"method": {"name": "hnsw", "space_type": "cosinesimil", "engine": "lucene"}
+					}
+				}
+			}
+		}
+		self.client.indices.create(index=self.index_name, body=body)
 
 	def upsert(self, point_id: str, vector: List[float], payload: Dict[str, Any], namespace: Optional[str] = None) -> None:
-		self._ensure_dim(vector)
-		self.index.upsert(vectors=[{"id": point_id, "values": vector, "metadata": payload}], namespace=namespace)
+		# namespace ignored in OS simple setup
+		doc = {"id": point_id, **payload, "embedding": vector}
+		self.client.index(index=self.index_name, id=point_id, body=doc, refresh="wait_for")
 
 	def upsert_batch(self, items: List[Dict[str, Any]], namespace: Optional[str] = None) -> None:
 		for it in items:
 			vals = it.get('values') or it.get('vector')
 			if vals is None:
 				raise ValueError('Missing values for upsert item')
-			self._ensure_dim(vals)
-		self.index.upsert(vectors=items, namespace=namespace)
+			if len(vals) != int(self.dim):
+				raise ValueError(f"Vector length {len(vals)} != dim {self.dim}")
+			doc = {"id": it.get('id'), **(it.get('metadata') or {}), "embedding": vals}
+			self.client.index(index=self.index_name, id=it.get('id'), body=doc, refresh=False)
+		self.client.indices.refresh(index=self.index_name)
 
 	def delete_ids(self, ids: List[str], namespace: Optional[str] = None) -> None:
 		if not ids:
 			return
-		self.index.delete(ids=ids, namespace=namespace)
+		for id in ids:
+			self.client.delete(index=self.index_name, id=id)
+		self.client.indices.refresh(index=self.index_name)
 
 	def delete_all(self, namespace: Optional[str] = None) -> None:
-		try:
-			self.index.delete(delete_all=True, namespace=namespace)
-		except NotFoundException:
-			return
+		self.client.indices.delete(index=self.index_name)
 
 	def search(
 		self,
@@ -55,38 +104,38 @@ class VectorStore:
 		date_to: Optional[str] = None,
 		namespace: Optional[str] = None,
 	) -> List[Dict[str, Any]]:
-		flt: Dict[str, Any] = {}
+		filters: Dict[str, Any] = {}
+		must: List[Any] = []
 		if building:
-			flt['building'] = {"$eq": building}
-		date_range: Dict[str, int] = {}
-		if date_from:
-			try:
-				date_range["$gte"] = int(date_from.replace('-', ''))
-			except Exception:
-				pass
-		if date_to:
-			try:
-				date_range["$lte"] = int(date_to.replace('-', ''))
-			except Exception:
-				pass
-		if date_range:
-			flt['shot_ymd'] = date_range
+			must.append({"term": {"building": building}})
+		if date_from or date_to:
+			rng: Dict[str, Any] = {}
+			if date_from:
+				try:
+					rng["gte"] = int(date_from.replace('-', ''))
+				except Exception:
+					pass
+			if date_to:
+				try:
+					rng["lte"] = int(date_to.replace('-', ''))
+				except Exception:
+					pass
+			if rng:
+				must.append({"range": {"shot_ymd": rng}})
+		if must:
+			filters = {"bool": {"must": must}}
 
-		res = self.index.query(
-			vector=query_vector,
-			top_k=top_k,
-			include_metadata=True,
-			filter=flt or None,
-			namespace=namespace,
-		)
-		matches = res.get('matches', []) if isinstance(res, dict) else getattr(res, 'matches', [])
+		query: Dict[str, Any] = {
+			"size": top_k,
+			"query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
+			"knn": {"embedding": {"vector": query_vector, "k": top_k}},
+		}
+		res = self.client.search(index=self.index_name, body=query)
+		hits = res.get('hits', {}).get('hits', [])
 		out: List[Dict[str, Any]] = []
-		for m in matches:
-			mid = m.get('id') if isinstance(m, dict) else getattr(m, 'id', None)
-			score = m.get('score') if isinstance(m, dict) else getattr(m, 'score', None)
-			metadata = m.get('metadata') if isinstance(m, dict) else getattr(m, 'metadata', {})
-			row = {"id": str(mid), "score": float(score) if score is not None else 0.0}
-			if isinstance(metadata, dict):
-				row.update(metadata)
+		for h in hits:
+			row = {"id": h.get('_id'), "score": float(h.get('_score') or 0.0)}
+			src = h.get('_source') or {}
+			row.update(src)
 			out.append(row)
 		return out

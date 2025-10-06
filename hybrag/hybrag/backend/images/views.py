@@ -6,6 +6,9 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from .models import ImageItem
 
+# S3 helpers
+from ..storage.s3 import presign_put, presign_get
+
 _siglip = None
 _vectors = None
 _spell = None
@@ -30,16 +33,10 @@ def get_siglip():
 def get_vectors():
 	global _vectors
 	if _vectors is None:
-		if not settings.PINECONE_API_KEY:
-			raise RuntimeError('PINECONE_API_KEY not set')
 		from .vector.pinecone_store import VectorStore
-		svc = get_siglip()
+		_sig = get_siglip()
 		_vectors = VectorStore(
-			api_key=settings.PINECONE_API_KEY,
-			environment=settings.PINECONE_ENV,
-			index_name=settings.PINECONE_INDEX,
-			dim=svc.dim or 512,
-			host=settings.PINECONE_HOST,
+			api_key='', environment=None, index_name=getattr(settings, 'OS_INDEX', 'media-embeddings'), dim=getattr(settings, 'OS_EMB_DIM', 1536), host=getattr(settings, 'OS_HOST', None),
 		)
 	return _vectors
 
@@ -48,7 +45,7 @@ def absolute_media_url(rel_url: str) -> str:
 	base = getattr(settings, 'BACKEND_BASE_URL', '')
 	if rel_url.startswith('http://') or rel_url.startswith('https://'):
 		return rel_url
-	return f"{base.rstrip('/')}{rel_url}"
+	return f"{base.rstrip('/')}" + rel_url
 
 
 def normalize_text_query(q: str) -> str:
@@ -85,6 +82,17 @@ def rerank_with_metadata_boost(results, building: str | None):
 	return [r for _, r in boosted]
 
 
+class PresignUploadView(APIView):
+	permission_classes = [permissions.AllowAny]
+
+	def post(self, request):
+		key = request.data.get('key')
+		content_type = request.data.get('content_type', 'image/jpeg')
+		if not key:
+			return Response({"detail": "key required"}, status=400)
+		return Response(presign_put(key, content_type))
+
+
 class ImageIngestView(APIView):
 	permission_classes = [permissions.AllowAny]
 
@@ -97,72 +105,40 @@ class ImageIngestView(APIView):
 		if not (uploaded and building and shot_date):
 			return Response({"detail": "file, building, shot_date required"}, status=status.HTTP_400_BAD_REQUEST)
 
-		item = ImageItem.objects.create(file=uploaded, building=building, shot_date=shot_date, notes=notes)
-
-		vector = get_siglip().image_embed(item.file.path)
-
-		payload = {
-			"id": str(item.id),
-			"building": item.building,
-			"shot_date": str(item.shot_date),
-			"shot_ymd": int(str(item.shot_date).replace('-', '')),
-			"image_url": absolute_media_url(item.file.url),
-			"notes": item.notes or "",
-		}
-		namespace = getattr(settings, 'PINECONE_NAMESPACE', '') or None
-		get_vectors().upsert(str(item.id), vector, payload, namespace=namespace)
-
-		return Response({"id": str(item.id), "image_url": payload["image_url"]}, status=status.HTTP_201_CREATED)
+		return Response({"detail": "Direct file uploads are deprecated. Use S3 presign flow and /api/images/upsert-s3."}, status=400)
 
 
 class ImageBatchIngestView(APIView):
 	permission_classes = [permissions.AllowAny]
 
 	def post(self, request):
-		files = request.FILES.getlist('files')
-		buildings = request.data.getlist('building')
-		shot_dates = request.data.getlist('shot_date')
-		notes_list = request.data.getlist('notes') if 'notes' in request.data else []
+		return Response({"detail": "Batch local ingest deprecated. Use S3 presign + upsert-s3 per image."}, status=400)
 
-		if not files:
-			return Response({"detail": "files required"}, status=400)
-		if not (len(buildings) == len(files) and len(shot_dates) == len(files)):
-			return Response({"detail": "building and shot_date arrays must match files count"}, status=400)
-		if notes_list and len(notes_list) != len(files):
-			notes_list = [''] * len(files)
-		elif not notes_list:
-			notes_list = [''] * len(files)
 
-		items = []
-		for idx, f in enumerate(files):
-			item = ImageItem.objects.create(
-				file=f,
-				building=buildings[idx],
-				shot_date=shot_dates[idx],
-				notes=notes_list[idx] or ''
-			)
-			items.append(item)
+class UpsertViaS3View(APIView):
+	permission_classes = [permissions.AllowAny]
 
-		paths = [it.file.path for it in items]
-		vectors = get_siglip().image_embed_batch(paths)
+	def post(self, request):
+		item_id = request.data.get('id')
+		s3_key = request.data.get('s3_key')
+		building = request.data.get('building')
+		shot_date = request.data.get('shot_date')
+		notes = request.data.get('notes', '')
+		if not (item_id and s3_key and building and shot_date):
+			return Response({"detail": "id, s3_key, building, shot_date required"}, status=400)
 
-		upserts = []
-		resp = []
-		namespace = getattr(settings, 'PINECONE_NAMESPACE', '') or None
-		for it, vec in zip(items, vectors):
-			payload = {
-				"id": str(it.id),
-				"building": it.building,
-				"shot_date": str(it.shot_date),
-				"shot_ymd": int(str(it.shot_date).replace('-', '')),
-				"image_url": absolute_media_url(it.file.url),
-				"notes": it.notes or "",
-			}
-			upserts.append({"id": str(it.id), "values": vec, "metadata": payload})
-			resp.append({"id": str(it.id), "image_url": payload["image_url"]})
-
-		get_vectors().upsert_batch(upserts, namespace=namespace)
-		return Response({"uploaded": resp, "namespace": namespace or ''}, status=201)
+		img_url = presign_get(s3_key)
+		vec = get_siglip()._invoke({"image_url": img_url, "normalize": True})
+		payload = {
+			"id": str(item_id),
+			"building": building,
+			"shot_date": str(shot_date),
+			"shot_ymd": int(str(shot_date).replace('-', '')) if isinstance(shot_date, str) else 0,
+			"image_url": img_url,
+			"notes": notes or "",
+		}
+		get_vectors().upsert(str(item_id), vec, payload, namespace=None)
+		return Response({"id": str(item_id), "image_url": img_url}, status=201)
 
 
 class ImageSearchView(APIView):
@@ -187,8 +163,7 @@ class ImageSearchView(APIView):
 			embs = [get_siglip().text_embed(t) for t in terms]
 			query_vec = np.mean(np.array(embs, dtype=float), axis=0).tolist()
 		elif query_image_id:
-			item = get_object_or_404(ImageItem, id=query_image_id)
-			query_vec = get_siglip().image_embed(item.file.path)
+			return Response({"detail": "Provide a query image via S3 key flow; local files not supported"}, status=400)
 		else:
 			return Response({"detail": "provide q or query_image_id"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -198,5 +173,5 @@ class ImageSearchView(APIView):
 		results = rerank_with_metadata_boost(results, building)
 		for r in results:
 			if 'image_url' in r:
-				r['image_url'] = absolute_media_url(r['image_url'])
+				pass
 		return Response({"results": results, "namespace": namespace or ''})
