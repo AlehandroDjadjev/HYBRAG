@@ -9,3 +9,42 @@ run:
   command: sh startup.sh
   network:
     port: 8000
+  env:
+    - name: DJANGO_SETTINGS_MODULE
+      value: server.settings
+    - name: SAGEMAKER_ENDPOINT
+      value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
+    - name: AWS_REGION
+      value: eu-north-1
+    - name: SAGEMAKER_ENDPOINT_NAME
+      value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
+    - name: SAGEMAKER_RUNTIME_REGION
+      value: eu-north-1
+    - name: SIGLIP_MODEL_NAME
+      value: google/siglip2-giant-opt-patch16-384
+    - name: DEVICE
+      value: auto
+    - name: SECRET_KEY
+      value: dev
+    - name: S3_BUCKET
+      value: sagemaker-eu-north-1-050608054893
+    - name: PINECONE_API_KEY
+      value: "pcsk_41ubyE_GdMssC1R7owbZvZT3u9bNkhF58kBPSV2sgYp9fBERLC2bEDfY5dCk9dNXE7B5vF"
+    - name: PINECONE_HOST
+      value: "https://hybrag-xxrndry.svc.aped-4627-b74a.pinecone.io"
+    - name: PINECONE_INDEX
+      value: "hybrag"
+    - name: PINECONE_NAMESPACE
+      value: "images"
+    - name: PINECONE_CLOUD
+      value: "aws"
+    - name: PINECONE_REGION
+      value: "us-east-1"
+    - name: OS_HOST
+      value: https://search-siglip2-vector-db-7jnv3kowdvqnduws3oo2ccsdrm.aos.us-east-1.on.aws
+    - name: OS_USE_IAM:
+      value: "1"
+    - name: OS_INDEX
+      value: "media-embeddings"
+    - name: OS_EMB_DIM
+      value: "1536"
