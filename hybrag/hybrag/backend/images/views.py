@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404
 from .models import ImageItem
 
 # S3 helpers
-from ..storage.s3 import presign_put, presign_get
+from storage.s3 import presign_put, presign_get
 
 _siglip = None
 _vectors = None
