@@ -110,10 +110,13 @@ SAGEMAKER_ENDPOINT_NAME = os.getenv('SAGEMAKER_ENDPOINT_NAME')
 SAGEMAKER_RUNTIME_REGION = os.getenv('SAGEMAKER_RUNTIME_REGION') or os.getenv('AWS_REGION')
 EMBEDDINGS_PROVIDER = os.getenv('SIGLIP_PROVIDER', 'local')  # 'local' or 'sagemaker'
 AWS_REGION = os.getenv('AWS_REGION', SAGEMAKER_RUNTIME_REGION or 'eu-north-1')
+SAGEMAKER_ASYNC = os.getenv('SAGEMAKER_ASYNC', '1') == '1'
 
 # S3 (presigned URLs)
 S3_BUCKET = os.getenv('S3_BUCKET', '')
 S3_PRESIGN_EXPIRE = int(os.getenv('S3_PRESIGN_EXPIRE', '3600'))
+ASYNC_S3_INPUT_BUCKET = os.getenv('ASYNC_S3_INPUT_BUCKET', S3_BUCKET)
+ASYNC_S3_INPUT_PREFIX = os.getenv('ASYNC_S3_INPUT_PREFIX', 'siglip2-async-inputs/')
 
 # OpenSearch
 OS_HOST = os.getenv('OS_HOST', '')  # e.g., https://search-... or https://<vpce>...
