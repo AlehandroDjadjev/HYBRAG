@@ -1,5 +1,4 @@
 version: 1.0
-
 runtime: python3
 
 build:
@@ -10,69 +9,60 @@ build:
 run:
   runtime-version: 3.8.16
   command: sh startup.sh
+  network:
+    port: 8000
+  env:
+    - name: DJANGO_SETTINGS_MODULE
+      value: server.settings
+    - name: SECRET_KEY
+      value: dev
 
-network:
-  port: 8000
+    # ---- AWS / SageMaker ----
+    - name: AWS_REGION
+      value: eu-north-1
+    - name: SAGEMAKER_ENDPOINT
+      value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
+    - name: SAGEMAKER_ENDPOINT_NAME
+      value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
+    - name: SAGEMAKER_RUNTIME_REGION
+      value: eu-north-1
+    - name: SAGEMAKER_ASYNC
+      value: "1"
+    - name: ASYNC_S3_INPUT_BUCKET
+      value: sagemaker-eu-north-1-050608054893
+    - name: ASYNC_S3_INPUT_PREFIX
+      value: "siglip2-async-inputs/"
 
-env:
-  - name: DJANGO_SETTINGS_MODULE
-    value: server.settings
+    # ---- Model / device ----
+    - name: SIGLIP_MODEL_NAME
+      value: google/siglip2-giant-opt-patch16-384
+    - name: DEVICE
+      value: auto
 
-  - name: SECRET_KEY
-    value: dev
+    # ---- S3 (general app bucket) ----
+    - name: S3_BUCKET
+      value: sagemaker-eu-north-1-050608054893
 
-  # ---- AWS / SageMaker ----
-  - name: AWS_REGION
-    value: eu-north-1
-  - name: SAGEMAKER_ENDPOINT
-    value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
-  - name: SAGEMAKER_ENDPOINT_NAME
-    value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
-  - name: SAGEMAKER_RUNTIME_REGION
-    value: eu-north-1
-  - name: SAGEMAKER_ASYNC
-    value: "1"
-  - name: ASYNC_S3_INPUT_BUCKET
-    value: sagemaker-eu-north-1-050608054893
-  - name: ASYNC_S3_INPUT_PREFIX
-    value: "siglip2-async-inputs/"
+    # ---- Pinecone ----
+    - name: PINECONE_API_KEY
+      value: "pcsk_41ubyE_GdMssC1R7owbZvZT3u9bNkhF58kBPSV2sgYp9fBERLC2bEDfY5dCk9dNXE7B5vF"
+    - name: PINECONE_HOST
+      value: "https://hybrag-xxrndry.svc.aped-4627-b74a.pinecone.io"
+    - name: PINECONE_INDEX
+      value: "hybrag"
+    - name: PINECONE_NAMESPACE
+      value: "images"
+    - name: PINECONE_CLOUD
+      value: "aws"
+    - name: PINECONE_REGION
+      value: "us-east-1"
 
-  # (optional defaults if you also want to fix output locations)
-  # - name: ASYNC_S3_OUTPUT_BUCKET
-  #   value: sagemaker-eu-north-1-050608054893
-  # - name: ASYNC_S3_OUTPUT_PREFIX
-  #   value: "siglip2-async-outputs/"
-
-  # ---- Model / device ----
-  - name: SIGLIP_MODEL_NAME
-    value: google/siglip2-giant-opt-patch16-384
-  - name: DEVICE
-    value: auto
-
-  # ---- S3 (general app bucket) ----
-  - name: S3_BUCKET
-    value: sagemaker-eu-north-1-050608054893
-
-  # ---- Pinecone ----
-  - name: PINECONE_API_KEY
-    value: "pcsk_41ubyE_GdMssC1R7owbZvZT3u9bNkhF58kBPSV2sgYp9fBERLC2bEDfY5dCk9dNXE7B5vF"
-  - name: PINECONE_HOST
-    value: "https://hybrag-xxrndry.svc.aped-4627-b74a.pinecone.io"
-  - name: PINECONE_INDEX
-    value: "hybrag"
-  - name: PINECONE_NAMESPACE
-    value: "images"
-  - name: PINECONE_CLOUD
-    value: "aws"
-  - name: PINECONE_REGION
-    value: "us-east-1"
-
-  # ---- OpenSearch ----
-  - name: OS_HOST
-    value: "https://search-siglip2-vector-db-7jnv3kowdvqnduws3oo2ccsdrm.aos.us-east-1.on.aws"
-  - name: OS_USE_IAM
-    value: "1"
-  - name: OS_INDEX
-    value: "media-embeddings"
-  - name: OS_EMB_DIM
-    value: "1536"
+    # ---- OpenSearch ----
+    - name: OS_HOST
+      value: "https://search-siglip2-vector-db-7jnv3kowdvqnduws3oo2ccsdrm.aos.us-east-1.on.aws"
+    - name: OS_USE_IAM
+      value: "1"
+    - name: OS_INDEX
+      value: "media-embeddings"
+    - name: OS_EMB_DIM
+      value: "1536"
