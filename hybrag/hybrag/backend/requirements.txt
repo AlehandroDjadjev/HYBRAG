@@ -12,3 +12,6 @@ opensearch-py>=2.6
 requests>=2.31
 python-dotenv>=1.0
 
+# Python 3.8-compatible NumPy (avoid newer versions dropping 3.8)
+numpy>=1.23,<1.25
+
