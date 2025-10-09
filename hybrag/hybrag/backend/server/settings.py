@@ -111,6 +111,8 @@ SAGEMAKER_RUNTIME_REGION = os.getenv('SAGEMAKER_RUNTIME_REGION') or os.getenv('A
 EMBEDDINGS_PROVIDER = os.getenv('SIGLIP_PROVIDER', 'local')  # 'local' or 'sagemaker'
 AWS_REGION = os.getenv('AWS_REGION', SAGEMAKER_RUNTIME_REGION or 'eu-north-1')
 SAGEMAKER_ASYNC = os.getenv('SAGEMAKER_ASYNC', '1') == '1'
+# Async polling timeout (seconds)
+SAGEMAKER_ASYNC_TIMEOUT = int(os.getenv('SAGEMAKER_ASYNC_TIMEOUT', '150'))
 
 # S3 (presigned URLs)
 S3_BUCKET = os.getenv('S3_BUCKET', '')

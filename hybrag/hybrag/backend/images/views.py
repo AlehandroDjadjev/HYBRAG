@@ -160,7 +160,10 @@ class ImageSearchView(APIView):
 			q_norm = normalize_text_query(q)
 			terms = DOMAIN_SYNONYMS.get(q_norm, [q_norm])
 			import numpy as np
-			embs = [get_siglip().text_embed(t) for t in terms]
+			# Parallelize to reduce total time when async endpoint is used
+			from concurrent.futures import ThreadPoolExecutor
+			with ThreadPoolExecutor(max_workers=min(4, len(terms))) as ex:
+				embs = list(ex.map(lambda t: get_siglip().text_embed(t), terms))
 			query_vec = np.mean(np.array(embs, dtype=float), axis=0).tolist()
 		elif query_image_id:
 			return Response({"detail": "Provide a query image via S3 key flow; local files not supported"}, status=400)
