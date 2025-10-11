@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HYBRAG Image UI</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+      h2 { margin-top: 28px; }
+      fieldset { border: 1px solid #ddd; padding: 12px; margin-bottom: 20px; }
+      label { display: block; margin-top: 8px; }
+      input, select, textarea { width: 100%; padding: 6px; margin-top: 4px; }
+      button { margin-top: 10px; padding: 8px 12px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      pre { background: #f7f7f7; padding: 12px; overflow: auto; }
+      .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+      .card { border: 1px solid #eee; border-radius: 8px; padding: 8px; }
+      .img { width: 100%; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>HYBRAG Image Console</h1>
+
+    <fieldset>
+      <legend>1) Presign upload</legend>
+      <label>S3 key (path/filename.jpg)</label>
+      <input id="presign-key" placeholder="uploads/example.jpg" />
+      <label>Content-Type</label>
+      <input id="presign-ct" value="image/jpeg" />
+      <button onclick="presign()">Presign PUT</button>
+      <pre id="presign-out"></pre>
+    </fieldset>
+
+    <fieldset>
+      <legend>2) Upsert via S3</legend>
+      <div class="row">
+        <div>
+          <label>Item ID</label>
+          <input id="upsert-id" placeholder="uuid-or-string" />
+        </div>
+        <div>
+          <label>S3 key (from step 1)</label>
+          <input id="upsert-key" placeholder="uploads/example.jpg" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Building</label>
+          <input id="upsert-building" placeholder="site-a" />
+        </div>
+        <div>
+          <label>Shot date (YYYY-MM-DD)</label>
+          <input id="upsert-date" placeholder="2025-01-01" />
+        </div>
+      </div>
+      <label>Notes</label>
+      <textarea id="upsert-notes" rows="2"></textarea>
+      <button onclick="upsert()">Upsert</button>
+      <pre id="upsert-out"></pre>
+    </fieldset>
+
+    <fieldset>
+      <legend>3) Search</legend>
+      <div class="row">
+        <div>
+          <label>Query text</label>
+          <input id="search-q" placeholder="white dog" />
+        </div>
+        <div>
+          <label>Building filter</label>
+          <input id="search-building" placeholder="site-a (optional)" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Date from (YYYY-MM-DD)</label>
+          <input id="search-date-from" />
+        </div>
+        <div>
+          <label>Date to (YYYY-MM-DD)</label>
+          <input id="search-date-to" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Top K</label>
+          <input id="search-k" type="number" value="5" />
+        </div>
+        <div>
+          <label>Namespace (optional)</label>
+          <input id="search-namespace" />
+        </div>
+      </div>
+      <button onclick="search()">Search</button>
+      <pre id="search-raw"></pre>
+      <div class="results" id="search-results"></div>
+    </fieldset>
+
+    <script>
+      async function presign() {
+        const key = document.getElementById('presign-key').value.trim();
+        const ct = document.getElementById('presign-ct').value.trim() || 'image/jpeg';
+        const r = await fetch('/api/presign-upload', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({key, content_type: ct})});
+        const j = await r.json();
+        document.getElementById('presign-out').textContent = JSON.stringify(j, null, 2);
+      }
+
+      async function upsert() {
+        const id = document.getElementById('upsert-id').value.trim();
+        const s3_key = document.getElementById('upsert-key').value.trim();
+        const building = document.getElementById('upsert-building').value.trim();
+        const shot_date = document.getElementById('upsert-date').value.trim();
+        const notes = document.getElementById('upsert-notes').value;
+        const r = await fetch('/api/images/upsert-s3', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id, s3_key, building, shot_date, notes})});
+        const j = await r.json();
+        document.getElementById('upsert-out').textContent = JSON.stringify(j, null, 2);
+      }
+
+      async function search() {
+        const params = new URLSearchParams();
+        const q = document.getElementById('search-q').value.trim();
+        const building = document.getElementById('search-building').value.trim();
+        const date_from = document.getElementById('search-date-from').value.trim();
+        const date_to = document.getElementById('search-date-to').value.trim();
+        const k = document.getElementById('search-k').value.trim();
+        const namespace = document.getElementById('search-namespace').value.trim();
+        if (q) params.set('q', q);
+        if (building) params.set('building', building);
+        if (date_from) params.set('date_from', date_from);
+        if (date_to) params.set('date_to', date_to);
+        if (k) params.set('k', k);
+        if (namespace) params.set('namespace', namespace);
+        const url = '/api/search?' + params.toString();
+        const r = await fetch(url);
+        const j = await r.json();
+        document.getElementById('search-raw').textContent = JSON.stringify(j, null, 2);
+        const box = document.getElementById('search-results');
+        box.innerHTML = '';
+        const arr = (j && j.results) || [];
+        for (const it of arr) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          const imgUrl = it.image_url || '';
+          card.innerHTML = `<img class="img" src="${imgUrl}" alt=""/>\n<div><b>${it.building || ''}</b> | ${it.shot_date || ''}</div>\n<div>score: ${Number(it.score || 0).toFixed(3)}</div>\n<div>${(it.notes||'').slice(0,120)}</div>`;
+          box.appendChild(card);
+        }
+      }
+    </script>
+  </body>
+  </html>
+
+

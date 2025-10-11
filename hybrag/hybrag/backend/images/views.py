@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.views.generic import TemplateView
 from .models import ImageItem
 
 # S3 helpers
@@ -176,3 +177,7 @@ class ImageSearchView(APIView):
 			if 'image_url' in r:
 				pass
 		return Response({"results": results, "namespace": namespace or ''})
+
+
+class UIIndexView(TemplateView):
+	template_name = 'images/ui.html'
