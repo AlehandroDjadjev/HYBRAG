@@ -85,12 +85,12 @@ class SiglipService:
 			last_err = None
 			while time.time() < deadline:
 				try:
-				obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
-				data = json.loads(obj['Body'].read())
-				vec = _extract_embedding_from_data(data)
-				if vec is not None:
-					return vec
-				last_err = f'Bad async response shape: {type(data).__name__}'
+					obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+					data = json.loads(obj['Body'].read())
+					vec = _extract_embedding_from_data(data)
+					if vec is not None:
+						return vec
+					last_err = f'Bad async response shape: {type(data).__name__}'
 				except self.s3.exceptions.NoSuchKey:  # type: ignore[attr-defined]
 					pass
 				except Exception as pe:
@@ -135,12 +135,12 @@ class SiglipService:
 				last_err = None
 				while time.time() < deadline:
 					try:
-					obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
-					data = json.loads(obj['Body'].read())
-					vec = _extract_embedding_from_data(data)
-					if vec is not None:
-						return vec
-					last_err = f'Bad async response shape: {type(data).__name__}'
+						obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+						data = json.loads(obj['Body'].read())
+						vec = _extract_embedding_from_data(data)
+						if vec is not None:
+							return vec
+						last_err = f'Bad async response shape: {type(data).__name__}'
 					except self.s3.exceptions.NoSuchKey:  # type: ignore[attr-defined]
 						pass
 					except Exception as pe:
