@@ -33,13 +33,19 @@ run:
     - name: ASYNC_S3_INPUT_PREFIX
       value: "siglip2-async-inputs/"
     - name: SAGEMAKER_ASYNC_TIMEOUT
-      value: "360"
+      value: "180"
 
     # ---- Model / device ----
     - name: SIGLIP_MODEL_NAME
       value: google/siglip2-giant-opt-patch16-384
     - name: DEVICE
       value: auto
+
+    # ---- Gunicorn runtime ----
+    - name: NUM_WORKERS
+      value: "2"
+    - name: TIMEOUT
+      value: "600"
 
     # ---- S3 (general app bucket) ----
     - name: S3_BUCKET
