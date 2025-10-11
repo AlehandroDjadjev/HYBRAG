@@ -14,7 +14,19 @@ class VectorStore:
 		if not os_host:
 			raise RuntimeError('OS_HOST must be set to use OpenSearch')
 		use_iam = (os.getenv('OS_USE_IAM', '1') == '1')
-		region = os.getenv('AWS_REGION', 'eu-north-1')
+		region = os.getenv('OS_REGION') or os.getenv('AWS_REGION', 'us-east-1')
+		# Derive region from host if not provided (e.g., https://...aos.us-east-1.on.aws)
+		if not os.getenv('OS_REGION') and isinstance(os_host, str) and '.on.aws' in os_host:
+			try:
+				parts = os_host.split('.')
+				for i, p in enumerate(parts):
+					if p in ("aos", "es", "amazonaws", "on") and i > 0:
+						cand = parts[i-1]
+						if cand and '-' in cand:
+							region = cand
+							break
+			except Exception:
+				pass
 		if use_iam:
 			session = boto3.Session()
 			creds = session.get_credentials()

@@ -72,6 +72,8 @@ run:
     # ---- OpenSearch ----
     - name: OS_HOST
       value: "https://search-siglip2-vector-db-7jnv3kowdvqnduws3oo2ccsdrm.aos.us-east-1.on.aws"
+    - name: OS_REGION
+      value: "us-east-1"
     - name: OS_USE_IAM
       value: "1"
     - name: OS_INDEX
