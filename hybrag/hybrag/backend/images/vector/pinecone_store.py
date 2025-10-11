@@ -149,12 +149,23 @@ class VectorStore:
 		if must:
 			filters = {"bool": {"must": must}}
 
-		query: Dict[str, Any] = {
-			"size": top_k,
-			"query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
-			"knn": {"embedding": {"vector": query_vector, "k": top_k}},
-		}
-		res = self.client.search(index=self.index_name, body=query)
+		num_candidates = int(os.getenv('OS_NUM_CANDIDATES', str(max(top_k, 100))))
+		if filters:
+			query_obj: Dict[str, Any] = {
+				"bool": {
+					"filter": filters,
+					"must": {
+						"knn": {
+							"embedding": {"vector": query_vector, "k": top_k, "num_candidates": num_candidates}
+						}
+					}
+				}
+			}
+		else:
+			query_obj = {"knn": {"embedding": {"vector": query_vector, "k": top_k, "num_candidates": num_candidates}}}
+
+		body: Dict[str, Any] = {"size": top_k, "query": query_obj}
+		res = self.client.search(index=self.index_name, body=body)
 		hits = res.get('hits', {}).get('hits', [])
 		out: List[Dict[str, Any]] = []
 		for h in hits:
