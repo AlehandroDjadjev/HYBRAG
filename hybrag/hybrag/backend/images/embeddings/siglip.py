@@ -117,18 +117,18 @@ class SiglipService:
 			last_err = None
 			while time.time() < deadline:
 				try:
-				if out_loc:
-					obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
-					data = json.loads(obj['Body'].read())
-				else:
-					# List objects under derived prefix and read the first available
-					lst = self.s3.list_objects_v2(Bucket=out_bucket, Prefix=candidate_prefix)
-					contents = lst.get('Contents') or []
-					if not contents:
-						raise self.s3.exceptions.NoSuchKey({'Error': {'Code': 'NoSuchKey'}}, 'GetObject')  # trigger retry
-					best = sorted(contents, key=lambda x: x.get('LastModified') or 0, reverse=True)[0]
-					obj = self.s3.get_object(Bucket=out_bucket, Key=best['Key'])
-					data = json.loads(obj['Body'].read())
+					if out_loc:
+						obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+						data = json.loads(obj['Body'].read())
+					else:
+						# List objects under derived prefix and read the first available
+						lst = self.s3.list_objects_v2(Bucket=out_bucket, Prefix=candidate_prefix)
+						contents = lst.get('Contents') or []
+						if not contents:
+							raise self.s3.exceptions.NoSuchKey({'Error': {'Code': 'NoSuchKey'}}, 'GetObject')  # trigger retry
+						best = sorted(contents, key=lambda x: x.get('LastModified') or 0, reverse=True)[0]
+						obj = self.s3.get_object(Bucket=out_bucket, Key=best['Key'])
+						data = json.loads(obj['Body'].read())
 					vec = _extract_embedding_from_data(data)
 					if vec is not None:
 						return vec
@@ -177,17 +177,17 @@ class SiglipService:
 				last_err = None
 				while time.time() < deadline:
 					try:
-					if out_loc:
-						obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
-						data = json.loads(obj['Body'].read())
-					else:
-						lst = self.s3.list_objects_v2(Bucket=out_bucket, Prefix=candidate_prefix)
-						contents = lst.get('Contents') or []
-						if not contents:
-							raise self.s3.exceptions.NoSuchKey({'Error': {'Code': 'NoSuchKey'}}, 'GetObject')
-						best = sorted(contents, key=lambda x: x.get('LastModified') or 0, reverse=True)[0]
-						obj = self.s3.get_object(Bucket=out_bucket, Key=best['Key'])
-						data = json.loads(obj['Body'].read())
+						if out_loc:
+							obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+							data = json.loads(obj['Body'].read())
+						else:
+							lst = self.s3.list_objects_v2(Bucket=out_bucket, Prefix=candidate_prefix)
+							contents = lst.get('Contents') or []
+							if not contents:
+								raise self.s3.exceptions.NoSuchKey({'Error': {'Code': 'NoSuchKey'}}, 'GetObject')
+							best = sorted(contents, key=lambda x: x.get('LastModified') or 0, reverse=True)[0]
+							obj = self.s3.get_object(Bucket=out_bucket, Key=best['Key'])
+							data = json.loads(obj['Body'].read())
 						vec = _extract_embedding_from_data(data)
 						if vec is not None:
 							return vec
