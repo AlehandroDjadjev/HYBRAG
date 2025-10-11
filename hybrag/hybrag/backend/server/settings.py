@@ -119,6 +119,8 @@ S3_BUCKET = os.getenv('S3_BUCKET', '')
 S3_PRESIGN_EXPIRE = int(os.getenv('S3_PRESIGN_EXPIRE', '3600'))
 ASYNC_S3_INPUT_BUCKET = os.getenv('ASYNC_S3_INPUT_BUCKET', S3_BUCKET)
 ASYNC_S3_INPUT_PREFIX = os.getenv('ASYNC_S3_INPUT_PREFIX', 'siglip2-async-inputs/')
+ASYNC_S3_OUTPUT_BUCKET = os.getenv('ASYNC_S3_OUTPUT_BUCKET', ASYNC_S3_INPUT_BUCKET)
+ASYNC_S3_OUTPUT_PREFIX = os.getenv('ASYNC_S3_OUTPUT_PREFIX', 'siglip2-async-outputs/')
 
 # OpenSearch
 OS_HOST = os.getenv('OS_HOST', '')  # e.g., https://search-... or https://<vpce>...

@@ -25,17 +25,42 @@ def _extract_embedding_from_data(data) -> List[float] | None:
         vec = data.get('embedding')
         if isinstance(vec, list) and all(isinstance(x, (int, float)) for x in vec):
             return [float(x) for x in vec]
+        # Sometimes body is nested JSON string
+        body = data.get('body') or data.get('Body')
+        if isinstance(body, str):
+            try:
+                inner = json.loads(body)
+                return _extract_embedding_from_data(inner)
+            except Exception:
+                return None
         return None
     # Case 2: list of numbers -> treat as vector
     if isinstance(data, list) and data and all(isinstance(x, (int, float)) for x in data):
         return [float(x) for x in data]
-    # Case 3: list of dicts (pick first dict with 'embedding')
+    # Case 3: list of dicts (pick first dict with 'embedding' or nested body)
     if isinstance(data, list):
         for item in data:
-            if isinstance(item, dict) and isinstance(item.get('embedding'), list):
+            if isinstance(item, dict):
                 vec = item.get('embedding')
-                if vec and all(isinstance(x, (int, float)) for x in vec):
+                if isinstance(vec, list) and all(isinstance(x, (int, float)) for x in vec):
                     return [float(x) for x in vec]
+                body = item.get('body') or item.get('Body')
+                if isinstance(body, str):
+                    try:
+                        inner = json.loads(body)
+                        maybe = _extract_embedding_from_data(inner)
+                        if maybe is not None:
+                            return maybe
+                    except Exception:
+                        pass
+            elif isinstance(item, str):
+                try:
+                    inner = json.loads(item)
+                    maybe = _extract_embedding_from_data(inner)
+                    if maybe is not None:
+                        return maybe
+                except Exception:
+                    pass
     return None
 
 
@@ -78,14 +103,31 @@ class SiglipService:
 				ContentType='application/json',
 			)
 			out_loc = resp_async.get('OutputLocation')
-			if not out_loc:
-				raise RuntimeError(f'Async invoke returned no OutputLocation: {resp_async}')
-			out_bucket, out_key = _parse_s3_uri(out_loc)
+			if out_loc:
+				out_bucket, out_key = _parse_s3_uri(out_loc)
+			else:
+				# Some async setups rely on known output prefix; derive path from request key
+				out_bucket = getattr(settings, 'ASYNC_S3_OUTPUT_BUCKET', None) or bucket
+				out_prefix = getattr(settings, 'ASYNC_S3_OUTPUT_PREFIX', 'siglip2-async-outputs/')
+				# Mirror filename, allow service to append suffixes; we will list and pick the newest
+				base_name = key.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+				candidate_prefix = f"{out_prefix.rstrip('/')}/{base_name}"
+				# We'll list with prefix and pick first object when available
 			deadline = time.time() + int(getattr(settings, 'SAGEMAKER_ASYNC_TIMEOUT', 150))
 			last_err = None
 			while time.time() < deadline:
 				try:
+				if out_loc:
 					obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+					data = json.loads(obj['Body'].read())
+				else:
+					# List objects under derived prefix and read the first available
+					lst = self.s3.list_objects_v2(Bucket=out_bucket, Prefix=candidate_prefix)
+					contents = lst.get('Contents') or []
+					if not contents:
+						raise self.s3.exceptions.NoSuchKey({'Error': {'Code': 'NoSuchKey'}}, 'GetObject')  # trigger retry
+					best = sorted(contents, key=lambda x: x.get('LastModified') or 0, reverse=True)[0]
+					obj = self.s3.get_object(Bucket=out_bucket, Key=best['Key'])
 					data = json.loads(obj['Body'].read())
 					vec = _extract_embedding_from_data(data)
 					if vec is not None:
@@ -135,7 +177,16 @@ class SiglipService:
 				last_err = None
 				while time.time() < deadline:
 					try:
+					if out_loc:
 						obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+						data = json.loads(obj['Body'].read())
+					else:
+						lst = self.s3.list_objects_v2(Bucket=out_bucket, Prefix=candidate_prefix)
+						contents = lst.get('Contents') or []
+						if not contents:
+							raise self.s3.exceptions.NoSuchKey({'Error': {'Code': 'NoSuchKey'}}, 'GetObject')
+						best = sorted(contents, key=lambda x: x.get('LastModified') or 0, reverse=True)[0]
+						obj = self.s3.get_object(Bucket=out_bucket, Key=best['Key'])
 						data = json.loads(obj['Body'].read())
 						vec = _extract_embedding_from_data(data)
 						if vec is not None:
