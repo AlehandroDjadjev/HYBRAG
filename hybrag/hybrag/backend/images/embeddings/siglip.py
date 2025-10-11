@@ -4,6 +4,19 @@ from django.conf import settings
 import json
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
+import time
+import uuid
+
+
+def _parse_s3_uri(uri: str) -> tuple[str, str]:
+	if not uri.startswith('s3://'):
+		raise ValueError(f'Not an s3 uri: {uri}')
+	without = uri[len('s3://'):]
+	parts = without.split('/', 1)
+	if len(parts) != 2:
+		raise ValueError(f'Invalid s3 uri: {uri}')
+	return parts[0], parts[1]
 
 
 class SiglipService:
@@ -26,19 +39,95 @@ class SiglipService:
 				connect_timeout=3,
 			)
 		)
+		self.s3 = boto3.client('s3', config=Config(region_name=getattr(settings, 'AWS_REGION', region)))
+		self.use_async = True
 
 	def _invoke(self, payload: dict) -> list[float]:
-		resp = self.client.invoke_endpoint(
-			EndpointName=self.endpoint,
-			ContentType='application/json',
-			Accept='application/json',
-			Body=json.dumps(payload).encode('utf-8'),
-		)
-		body = json.loads(resp['Body'].read())
-		vec = body.get('embedding')
-		if not isinstance(vec, list):
-			raise RuntimeError(f'Bad response from SageMaker endpoint: {body}')
-		return vec
+		# If explicitly configured for async, use async path
+		if self.use_async:
+			bucket = getattr(settings, 'ASYNC_S3_INPUT_BUCKET', None) or getattr(settings, 'S3_BUCKET', None)
+			prefix = getattr(settings, 'ASYNC_S3_INPUT_PREFIX', 'siglip2-async-inputs/')
+			if not bucket:
+				raise RuntimeError('Async invocation requested but no ASYNC_S3_INPUT_BUCKET or S3_BUCKET configured')
+			key = f"{prefix.rstrip('/')}/{uuid.uuid4()}.json"
+			self.s3.put_object(Bucket=bucket, Key=key, Body=json.dumps(payload).encode('utf-8'), ContentType='application/json')
+			in_loc = f"s3://{bucket}/{key}"
+			resp_async = self.client.invoke_endpoint_async(
+				EndpointName=self.endpoint,
+				InputLocation=in_loc,
+				ContentType='application/json',
+			)
+			out_loc = resp_async.get('OutputLocation')
+			if not out_loc:
+				raise RuntimeError(f'Async invoke returned no OutputLocation: {resp_async}')
+			out_bucket, out_key = _parse_s3_uri(out_loc)
+			deadline = time.time() + int(getattr(settings, 'SAGEMAKER_ASYNC_TIMEOUT', 150))
+			last_err = None
+			while time.time() < deadline:
+				try:
+					obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+					data = json.loads(obj['Body'].read())
+					vec = data.get('embedding')
+					if isinstance(vec, list):
+						return vec
+					last_err = f'Bad async response: {data}'
+				except self.s3.exceptions.NoSuchKey:  # type: ignore[attr-defined]
+					pass
+				except Exception as pe:
+					last_err = str(pe)
+				time.sleep(2)
+			raise RuntimeError(last_err or 'Timed out waiting for async output')
+
+		# Try real-time first, fallback to async if the endpoint rejects it
+		try:
+			resp = self.client.invoke_endpoint(
+				EndpointName=self.endpoint,
+				ContentType='application/json',
+				Accept='application/json',
+				Body=json.dumps(payload).encode('utf-8'),
+			)
+			body = json.loads(resp['Body'].read())
+			vec = body.get('embedding')
+			if not isinstance(vec, list):
+				raise RuntimeError(f'Bad response from SageMaker endpoint: {body}')
+			return vec
+		except ClientError as e:
+			msg = str(e)
+			if 'does not support this inference type' in msg:
+				# Fallback to async
+				bucket = getattr(settings, 'ASYNC_S3_INPUT_BUCKET', None) or getattr(settings, 'S3_BUCKET', None)
+				prefix = getattr(settings, 'ASYNC_S3_INPUT_PREFIX', 'siglip2-async-inputs/')
+				if not bucket:
+					raise RuntimeError('Async fallback requested but no ASYNC_S3_INPUT_BUCKET or S3_BUCKET configured')
+				key = f"{prefix.rstrip('/')}/{uuid.uuid4()}.json"
+				self.s3.put_object(Bucket=bucket, Key=key, Body=json.dumps(payload).encode('utf-8'), ContentType='application/json')
+				in_loc = f"s3://{bucket}/{key}"
+				resp_async = self.client.invoke_endpoint_async(
+					EndpointName=self.endpoint,
+					InputLocation=in_loc,
+					ContentType='application/json',
+				)
+				out_loc = resp_async.get('OutputLocation')
+				if not out_loc:
+					raise RuntimeError(f'Async invoke returned no OutputLocation: {resp_async}')
+				out_bucket, out_key = _parse_s3_uri(out_loc)
+				deadline = time.time() + int(getattr(settings, 'SAGEMAKER_ASYNC_TIMEOUT', 150))
+				last_err = None
+				while time.time() < deadline:
+					try:
+						obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+						data = json.loads(obj['Body'].read())
+						vec = data.get('embedding')
+						if isinstance(vec, list):
+							return vec
+						last_err = f'Bad async response: {data}'
+					except self.s3.exceptions.NoSuchKey:  # type: ignore[attr-defined]
+						pass
+					except Exception as pe:
+						last_err = str(pe)
+					time.sleep(2)
+				raise RuntimeError(last_err or 'Timed out waiting for async output')
+			raise
 
 	def image_embed(self, file_path: str) -> list[float]:
 		# This code used to load image locally. Now assume image is accessible via URL.

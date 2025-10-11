@@ -32,6 +32,8 @@ run:
       value: sagemaker-eu-north-1-050608054893
     - name: ASYNC_S3_INPUT_PREFIX
       value: "siglip2-async-inputs/"
+    - name: SAGEMAKER_ASYNC_TIMEOUT
+      value: "300"
 
     # ---- Model / device ----
     - name: SIGLIP_MODEL_NAME

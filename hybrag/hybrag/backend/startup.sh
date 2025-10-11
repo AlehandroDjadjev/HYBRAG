@@ -1,1 +1,1 @@
-python manage.py collectstatic --noinput && gunicorn --workers 2 --timeout 180 server.wsgi
+python manage.py collectstatic --noinput && gunicorn --workers 2 --timeout 360 server.wsgi
