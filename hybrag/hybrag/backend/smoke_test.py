@@ -29,11 +29,11 @@ def print_result(name: str, ok: bool, status: int, detail: str = "") -> None:
     print(f"[{prefix}] {name}: HTTP {status}{extra}")
 
 
-def test_search(base_url: str, api_key: Optional[str]) -> bool:
+def test_search(base_url: str, api_key: Optional[str], timeout_s: int = 60) -> bool:
     url = build_url(base_url, "api/search")
     params = {"q": "excavator", "k": "1"}
     try:
-        resp = requests.get(url, params=params, headers=build_headers(api_key), timeout=20)
+        resp = requests.get(url, params=params, headers=build_headers(api_key), timeout=timeout_s)
         ok = resp.status_code == 200
         detail = ""
         if ok:
@@ -102,6 +102,7 @@ def main() -> int:
     parser.add_argument("--app-url", default=os.getenv("APP_URL"), help="Base URL of the deployed App Runner service")
     parser.add_argument("--api-key", default=os.getenv("API_KEY"), help="Optional API key header value")
     parser.add_argument("--run", nargs="*", default=["search", "presign"], choices=["search", "presign", "upsert"], help="Which tests to run")
+    parser.add_argument("--timeout", type=int, default=int(os.getenv("SMOKE_TIMEOUT", "90")))
     parser.add_argument("--s3-key", default=os.getenv("SMOKE_S3_KEY"), help="S3 key to use for upsert-s3 (optional)")
     parser.add_argument("--building", default=os.getenv("SMOKE_BUILDING", "test-building"))
     parser.add_argument("--shot-date", default=os.getenv("SMOKE_SHOT_DATE", "2025-01-01"))
@@ -113,7 +114,7 @@ def main() -> int:
 
     overall_ok = True
     if "search" in args.run:
-        overall_ok = test_search(args.app_url, args.api_key) and overall_ok
+        overall_ok = test_search(args.app_url, args.api_key, timeout_s=args.timeout) and overall_ok
     if "presign" in args.run:
         overall_ok = test_presign_upload(args.app_url, args.api_key) and overall_ok
     if "upsert" in args.run:

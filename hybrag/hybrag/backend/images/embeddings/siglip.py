@@ -19,6 +19,26 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
 	return parts[0], parts[1]
 
 
+def _extract_embedding_from_data(data) -> List[float] | None:
+    # Case 1: dict with 'embedding'
+    if isinstance(data, dict):
+        vec = data.get('embedding')
+        if isinstance(vec, list) and all(isinstance(x, (int, float)) for x in vec):
+            return [float(x) for x in vec]
+        return None
+    # Case 2: list of numbers -> treat as vector
+    if isinstance(data, list) and data and all(isinstance(x, (int, float)) for x in data):
+        return [float(x) for x in data]
+    # Case 3: list of dicts (pick first dict with 'embedding')
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and isinstance(item.get('embedding'), list):
+                vec = item.get('embedding')
+                if vec and all(isinstance(x, (int, float)) for x in vec):
+                    return [float(x) for x in vec]
+    return None
+
+
 class SiglipService:
 	def __init__(self, model_name: str | None = None, device: str | None = None):
 		# Ignore local model; use SageMaker endpoint per settings
@@ -65,12 +85,12 @@ class SiglipService:
 			last_err = None
 			while time.time() < deadline:
 				try:
-					obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
-					data = json.loads(obj['Body'].read())
-					vec = data.get('embedding')
-					if isinstance(vec, list):
-						return vec
-					last_err = f'Bad async response: {data}'
+				obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+				data = json.loads(obj['Body'].read())
+				vec = _extract_embedding_from_data(data)
+				if vec is not None:
+					return vec
+				last_err = f'Bad async response shape: {type(data).__name__}'
 				except self.s3.exceptions.NoSuchKey:  # type: ignore[attr-defined]
 					pass
 				except Exception as pe:
@@ -115,12 +135,12 @@ class SiglipService:
 				last_err = None
 				while time.time() < deadline:
 					try:
-						obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
-						data = json.loads(obj['Body'].read())
-						vec = data.get('embedding')
-						if isinstance(vec, list):
-							return vec
-						last_err = f'Bad async response: {data}'
+					obj = self.s3.get_object(Bucket=out_bucket, Key=out_key)
+					data = json.loads(obj['Body'].read())
+					vec = _extract_embedding_from_data(data)
+					if vec is not None:
+						return vec
+					last_err = f'Bad async response shape: {type(data).__name__}'
 					except self.s3.exceptions.NoSuchKey:  # type: ignore[attr-defined]
 						pass
 					except Exception as pe:

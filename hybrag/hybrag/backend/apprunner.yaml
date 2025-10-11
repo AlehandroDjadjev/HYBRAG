@@ -33,7 +33,7 @@ run:
     - name: ASYNC_S3_INPUT_PREFIX
       value: "siglip2-async-inputs/"
     - name: SAGEMAKER_ASYNC_TIMEOUT
-      value: "300"
+      value: "360"
 
     # ---- Model / device ----
     - name: SIGLIP_MODEL_NAME
