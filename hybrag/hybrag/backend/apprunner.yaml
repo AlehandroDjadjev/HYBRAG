@@ -75,7 +75,11 @@ run:
     - name: OS_REGION
       value: "us-east-1"
     - name: OS_USE_IAM
-      value: "1"
+      value: "0"
+    - name: OS_USERNAME
+      value: "opensearch"
+    - name: OS_PASSWORD
+      value: "Opensearch123!"
     - name: OS_INDEX
       value: "media-embeddings"
     - name: OS_EMB_DIM

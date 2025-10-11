@@ -14,7 +14,7 @@ class VectorStore:
 		if not os_host:
 			raise RuntimeError('OS_HOST must be set to use OpenSearch')
 		use_iam = (os.getenv('OS_USE_IAM', '1') == '1')
-		region = os.getenv('OS_REGION') or os.getenv('AWS_REGION', 'us-east-1')
+		region = os.getenv('OS_REGION') or os.getenv('AWS_REGION', '-1')
 		# Derive region from host if not provided (e.g., https://...aos.us-east-1.on.aws)
 		if not os.getenv('OS_REGION') and isinstance(os_host, str) and '.on.aws' in os_host:
 			try:
@@ -27,6 +27,18 @@ class VectorStore:
 							break
 			except Exception:
 				pass
+		# Normalize host config for opensearch-py
+		host_cfg = os_host
+		try:
+			if isinstance(os_host, str) and os_host.startswith('http'):
+				from urllib.parse import urlparse
+				u = urlparse(os_host)
+				hostname = u.hostname or os_host
+				port = u.port or (443 if u.scheme == 'https' else 80)
+				host_cfg = [{"host": hostname, "port": port}]
+		except Exception:
+			pass
+
 		if use_iam:
 			session = boto3.Session()
 			creds = session.get_credentials()
@@ -34,7 +46,7 @@ class VectorStore:
 				raise RuntimeError('No AWS credentials for OpenSearch IAM auth')
 			awsauth = AWS4Auth(creds.access_key, creds.secret_key, region, 'es', session_token=creds.token)
 			self.client = OpenSearch(
-				hosts=[os_host],
+				hosts=host_cfg,
 				http_auth=awsauth,
 				use_ssl=True,
 				verify_certs=True,
@@ -47,7 +59,7 @@ class VectorStore:
 			user = os.getenv('OS_USERNAME', '')
 			pwd = os.getenv('OS_PASSWORD', '')
 			self.client = OpenSearch(
-				hosts=[os_host],
+				hosts=host_cfg,
 				http_auth=(user, pwd),
 				use_ssl=True,
 				verify_certs=True,
