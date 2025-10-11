@@ -149,20 +149,15 @@ class VectorStore:
 		if must:
 			filters = {"bool": {"must": must}}
 
-		num_candidates = int(os.getenv('OS_NUM_CANDIDATES', str(max(top_k, 100))))
 		if filters:
 			query_obj: Dict[str, Any] = {
 				"bool": {
 					"filter": filters,
-					"must": {
-						"knn": {
-							"embedding": {"vector": query_vector, "k": top_k, "num_candidates": num_candidates}
-						}
-					}
+					"must": {"knn": {"embedding": {"vector": query_vector, "k": top_k}}},
 				}
 			}
 		else:
-			query_obj = {"knn": {"embedding": {"vector": query_vector, "k": top_k, "num_candidates": num_candidates}}}
+			query_obj = {"knn": {"embedding": {"vector": query_vector, "k": top_k}}}
 
 		body: Dict[str, Any] = {"size": top_k, "query": query_obj}
 		res = self.client.search(index=self.index_name, body=body)
