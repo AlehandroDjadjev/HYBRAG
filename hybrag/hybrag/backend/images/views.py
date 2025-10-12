@@ -5,6 +5,7 @@ from rest_framework import status, permissions
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.views.generic import TemplateView
+from urllib.parse import urlparse, unquote
 from .models import ImageItem
 
 # S3 helpers
@@ -180,6 +181,19 @@ class ImageSearchView(APIView):
 				s3k = r.get('s3_key')
 				if s3k:
 					r['image_url'] = presign_get(s3k)
+				else:
+					# Backward compatibility: derive s3_key from legacy image_url if it points to our bucket
+					img = r.get('image_url')
+					if img and isinstance(img, str):
+						u = urlparse(img)
+						host = (u.hostname or '').lower()
+						path = unquote(u.path or '')
+						bucket = getattr(settings, 'S3_BUCKET', '')
+						if bucket and bucket.lower() in host:
+							# virtual-hosted: <bucket>.s3[.region].amazonaws.com/<key>
+							s3_key = path.lstrip('/')
+							if s3_key:
+								r['image_url'] = presign_get(s3_key)
 			except Exception:
 				pass
 		return Response({"results": results, "namespace": namespace or ''})

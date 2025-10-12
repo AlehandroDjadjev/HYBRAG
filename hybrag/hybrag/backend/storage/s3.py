@@ -8,7 +8,15 @@ _region = getattr(settings, 'AWS_REGION', 'eu-north-1')
 _bucket = getattr(settings, 'S3_BUCKET', '')
 _expire = int(getattr(settings, 'S3_PRESIGN_EXPIRE', 3600))
 
-_s3 = boto3.client('s3', config=Config(region_name=_region, retries={"max_attempts": 3, "mode": "standard"}))
+_s3 = boto3.client(
+    's3',
+    config=Config(
+        region_name=_region,
+        signature_version='s3v4',
+        s3={'addressing_style': 'virtual'},
+        retries={"max_attempts": 3, "mode": "standard"},
+    ),
+)
 
 
 def presign_put(key: str, content_type: str = 'image/jpeg') -> Dict:
@@ -28,6 +36,6 @@ def presign_get(key: str) -> str:
 	return _s3.generate_presigned_url(
 		'get_object',
 		Params={'Bucket': _bucket, 'Key': key},
-		ExpiresIn=_expire,
+        ExpiresIn=min(_expire, 900),
 	)
 
