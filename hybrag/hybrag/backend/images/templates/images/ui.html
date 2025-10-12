@@ -3,105 +3,206 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HYBRAG Image UI</title>
+    <title>HYBRAG Console</title>
     <style>
-      body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
-      h2 { margin-top: 28px; }
-      fieldset { border: 1px solid #ddd; padding: 12px; margin-bottom: 20px; }
-      label { display: block; margin-top: 8px; }
-      input, select, textarea { width: 100%; padding: 6px; margin-top: 4px; }
-      button { margin-top: 10px; padding: 8px 12px; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-      pre { background: #f7f7f7; padding: 12px; overflow: auto; }
-      .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-      .card { border: 1px solid #eee; border-radius: 8px; padding: 8px; }
-      .img { width: 100%; border-radius: 6px; }
+      :root {
+        --bg: #0b1220;
+        --panel: #101829;
+        --panel-2: #0d1424;
+        --text: #e6edf3;
+        --muted: #9fb0c3;
+        --primary: #5b8cff;
+        --primary-2: #3b6fff;
+        --border: #1e2a43;
+      }
+      * { box-sizing: border-box; }
+      body { font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial, sans-serif; margin: 0; color: var(--text); background: radial-gradient(1200px 600px at 20% 0%, #13203a 0%, var(--bg) 50%); }
+      .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #0f1a30, #0b1220); position: sticky; top: 0; z-index: 10; }
+      .brand { font-weight: 700; letter-spacing: .4px; }
+      .brand b { color: var(--primary); }
+      .badge { display: inline-block; background: #1e2a43; color: var(--muted); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+      .layout { display: grid; grid-template-columns: 220px 1fr; gap: 18px; max-width: 1200px; margin: 0 auto; padding: 24px; }
+      @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+      .sidebar { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; height: fit-content; position: sticky; top: 76px; }
+      .navbtn { width: 100%; text-align: left; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); margin-bottom: 8px; cursor: pointer; }
+      .navbtn:hover { border-color: var(--primary); }
+      .navbtn.active { background: #162344; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(91,140,255,.15) inset; }
+      .content { min-width: 0; }
+      .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; box-shadow: 0 6px 20px rgba(0,0,0,.25); margin-bottom: 18px; }
+      .card h2 { margin: 0 0 10px; font-size: 18px; }
+      label { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
+      input, select, textarea { width: 100%; padding: 10px 12px; margin-top: 6px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; outline: none; }
+      input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(91,140,255,.15); }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 720px) { .row { grid-template-columns: 1fr; } }
+      .btn { margin-top: 12px; padding: 10px 14px; background: var(--primary); color: #fff; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; }
+      .btn:hover { background: var(--primary-2); }
+      .btn.secondary { background: #2a3b5e; }
+      .btn.secondary:hover { background: #334872; }
+      .inline { display: inline-flex; gap: 8px; align-items: center; }
+      .logbox { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; overflow: auto; color: var(--muted); margin-top: 10px; }
+      .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+      .img { width: 100%; height: 180px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); background: #0a0f1c; }
+      .badge { display: inline-block; background: #1e2a43; color: var(--muted); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
+      details { margin-top: 10px; }
+      details > summary { cursor: pointer; color: var(--muted); }
+      .hidden { display: none; }
     </style>
   </head>
   <body>
-    <h1>HYBRAG Image Console</h1>
+    <div class="topbar">
+      <div class="brand">HYBRAG <b>Console</b></div>
+      <div class="badge">v1</div>
+    </div>
 
-    <fieldset>
-      <legend>1) Presign upload</legend>
-      <label>S3 key (path/filename.jpg)</label>
-      <input id="presign-key" placeholder="uploads/example.jpg" />
-      <label>Content-Type</label>
-      <input id="presign-ct" value="image/jpeg" />
-      <button onclick="presign()">Presign PUT</button>
-      <pre id="presign-out"></pre>
-    </fieldset>
+    <div class="layout">
+      <div class="sidebar">
+        <button class="navbtn active" onclick="switchSection('sec-search', this)">Search</button>
+        <button class="navbtn" onclick="switchSection('sec-upsert', this)">Upsert</button>
+        <button class="navbtn" onclick="switchSection('sec-bulk', this)">Bulk Upload</button>
+      </div>
 
-    <fieldset>
-      <legend>2) Upsert via S3</legend>
-      <div class="row">
-        <div>
-          <label>Item ID</label>
-          <input id="upsert-id" placeholder="uuid-or-string" />
-        </div>
-        <div>
-          <label>S3 key (from step 1)</label>
-          <input id="upsert-key" placeholder="uploads/example.jpg" />
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Building</label>
-          <input id="upsert-building" placeholder="site-a" />
-        </div>
-        <div>
-          <label>Shot date (YYYY-MM-DD)</label>
-          <input id="upsert-date" placeholder="2025-01-01" />
-        </div>
-      </div>
-      <label>Notes</label>
-      <textarea id="upsert-notes" rows="2"></textarea>
-      <button onclick="upsert()">Upsert</button>
-      <pre id="upsert-out"></pre>
-    </fieldset>
+      <div class="content">
+        <section id="sec-search" class="card">
+          <h2>Search</h2>
+          <div class="row">
+            <div>
+              <label>Query text</label>
+              <input id="search-q" placeholder="e.g., white dog" />
+            </div>
+            <div>
+              <label>Building filter</label>
+              <input id="search-building" placeholder="site-a (optional)" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Date from</label>
+              <input id="search-date-from" type="date" />
+            </div>
+            <div>
+              <label>Date to</label>
+              <input id="search-date-to" type="date" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Top K</label>
+              <input id="search-k" type="number" value="5" />
+            </div>
+            <div>
+              <label>Namespace (optional)</label>
+              <input id="search-namespace" />
+            </div>
+          </div>
+          <button class="btn" onclick="search()">Search</button>
+          <div class="results" id="search-results"></div>
+        </section>
 
-    <fieldset>
-      <legend>3) Search</legend>
-      <div class="row">
-        <div>
-          <label>Query text</label>
-          <input id="search-q" placeholder="white dog" />
-        </div>
-        <div>
-          <label>Building filter</label>
-          <input id="search-building" placeholder="site-a (optional)" />
-        </div>
+        <section id="sec-upsert" class="card hidden">
+          <h2>Upsert via S3</h2>
+          <div class="row">
+            <div>
+              <label>Item ID</label>
+              <div class="inline" style="width:100%">
+                <input id="upsert-id" placeholder="uuid-or-string" style="flex:1" />
+                <button class="btn secondary" type="button" onclick="genId()">Generate</button>
+              </div>
+            </div>
+            <div>
+              <label>S3 key (already uploaded)</label>
+              <input id="upsert-key" placeholder="uploads/example.jpg" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Building</label>
+              <input id="upsert-building" placeholder="site-a" />
+            </div>
+            <div>
+              <label>Shot date</label>
+              <input id="upsert-date" type="date" />
+            </div>
+          </div>
+          <label>Notes</label>
+          <textarea id="upsert-notes" rows="2"></textarea>
+          <button class="btn" onclick="upsert()">Upsert</button>
+          <div class="logbox" id="upsert-out"></div>
+
+          <details>
+            <summary>Advanced: Presign single file (optional)</summary>
+            <div class="row">
+              <div>
+                <label>S3 key (path/filename.jpg)</label>
+                <input id="presign-key" placeholder="uploads/example.jpg" />
+              </div>
+              <div>
+                <label>Content-Type</label>
+                <select id="presign-ct">
+                  <option value="image/jpeg">image/jpeg</option>
+                  <option value="image/png">image/png</option>
+                  <option value="image/webp">image/webp</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn secondary" onclick="presign()" type="button">Presign PUT</button>
+            <div class="logbox" id="presign-out"></div>
+          </details>
+        </section>
+
+        <section id="sec-bulk" class="card hidden">
+          <h2>Bulk upload (select folder)</h2>
+          <div class="row">
+            <div>
+              <label>S3 prefix (folder in bucket)</label>
+              <input id="bulk-prefix" placeholder="bulk-uploads/" />
+            </div>
+            <div>
+              <label>Concurrent uploads</label>
+              <input id="bulk-concurrency" type="number" value="3" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Building (applied to all)</label>
+              <input id="bulk-building" placeholder="site-a" />
+            </div>
+            <div>
+              <label>Shot date (applied to all)</label>
+              <input id="bulk-date" type="date" />
+            </div>
+          </div>
+          <label>Notes (applied to all)</label>
+          <textarea id="bulk-notes" rows="2"></textarea>
+          <label>Select a folder of images</label>
+          <input id="bulk-input" type="file" webkitdirectory multiple />
+          <button class="btn" onclick="bulkUpload()">Start bulk upload</button>
+          <div class="logbox" id="bulk-log"></div>
+        </section>
       </div>
-      <div class="row">
-        <div>
-          <label>Date from (YYYY-MM-DD)</label>
-          <input id="search-date-from" />
-        </div>
-        <div>
-          <label>Date to (YYYY-MM-DD)</label>
-          <input id="search-date-to" />
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Top K</label>
-          <input id="search-k" type="number" value="5" />
-        </div>
-        <div>
-          <label>Namespace (optional)</label>
-          <input id="search-namespace" />
-        </div>
-      </div>
-      <button onclick="search()">Search</button>
-      <div class="results" id="search-results"></div>
-    </fieldset>
+    </div>
 
     <script>
+      function switchSection(id, btn) {
+        document.querySelectorAll('.content > section').forEach(s => s.classList.add('hidden'));
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('hidden');
+        document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+      }
+
       async function presign() {
         const key = document.getElementById('presign-key').value.trim();
         const ct = document.getElementById('presign-ct').value.trim() || 'image/jpeg';
         const r = await fetch('/api/presign-upload', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({key, content_type: ct})});
         const j = await r.json();
         document.getElementById('presign-out').textContent = JSON.stringify(j, null, 2);
+      }
+
+      function genId() {
+        const el = document.getElementById('upsert-id');
+        const v = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(16).slice(2));
+        el.value = v;
       }
 
       async function upsert() {
@@ -141,43 +242,14 @@
           card.className = 'card';
           const imgUrl = it.image_url || '';
           const rank = idx + 1;
-          card.innerHTML = `<img class="img" src="${imgUrl}" alt=""/>\n<div><b>#${rank}</b> — score: ${Number(it.score || 0).toFixed(3)}</div>\n<div><b>${it.building || ''}</b> | ${it.shot_date || ''}</div>\n<div>${(it.notes||'').slice(0,120)}</div>`;
+          card.innerHTML = `<img class="img" src="${imgUrl}" alt=""/>
+<div><span class="badge">#${rank}</span> <span class="badge">${Number(it.score || 0).toFixed(3)}</span></div>
+<div><b>${it.building || ''}</b> | ${it.shot_date || ''}</div>
+<div>${(it.notes||'').slice(0,120)}</div>`;
           box.appendChild(card);
         });
       }
-    </script>
 
-    <fieldset>
-      <legend>4) Bulk upload (select folder)</legend>
-      <div class="row">
-        <div>
-          <label>S3 prefix (folder in bucket)</label>
-          <input id="bulk-prefix" placeholder="bulk-uploads/" />
-        </div>
-        <div>
-          <label>Concurrent uploads</label>
-          <input id="bulk-concurrency" type="number" value="3" />
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Building (applied to all)</label>
-          <input id="bulk-building" placeholder="site-a" />
-        </div>
-        <div>
-          <label>Shot date (YYYY-MM-DD, applied to all)</label>
-          <input id="bulk-date" placeholder="2025-01-01" />
-        </div>
-      </div>
-      <label>Notes (applied to all)</label>
-      <textarea id="bulk-notes" rows="2"></textarea>
-      <label>Select a folder of images</label>
-      <input id="bulk-input" type="file" webkitdirectory multiple />
-      <button onclick="bulkUpload()">Start bulk upload</button>
-      <pre id="bulk-log"></pre>
-    </fieldset>
-
-    <script>
       function logBulk(msg) {
         const el = document.getElementById('bulk-log');
         el.textContent += msg + "\n";
@@ -212,10 +284,7 @@
 
         logBulk(`Starting bulk: ${files.length} files, prefix="${prefix}"`);
 
-        let idx = 0;
-        let inFlight = 0;
-        let done = 0;
-
+        let idx = 0; let inFlight = 0; let done = 0;
         return new Promise((resolve) => {
           const next = () => {
             if (idx >= files.length && inFlight === 0) { logBulk('Bulk completed.'); resolve(); return; }
@@ -232,22 +301,21 @@
                   await putToS3(ps.url, file, file.type);
                   const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(16).slice(2));
                   await upsertOne(id, key, building, shot_date, notes);
-                  done++;
-                  logBulk(`OK (${done}/${files.length}): ${rel}`);
+                  done++; logBulk(`OK (${done}/${files.length}): ${rel}`);
                 } catch (e) {
                   logBulk(`ERR: ${e && e.message ? e.message : e}`);
-                } finally {
-                  inFlight--;
-                  next();
-                }
+                } finally { inFlight--; next(); }
               })();
             }
           };
           next();
         });
       }
+
+      // default
+      switchSection('sec-search');
     </script>
   </body>
-  </html>
+</html>
 
 
