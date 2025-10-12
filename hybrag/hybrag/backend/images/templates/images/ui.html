@@ -146,6 +146,107 @@
         }
       }
     </script>
+
+    <fieldset>
+      <legend>4) Bulk upload (select folder)</legend>
+      <div class="row">
+        <div>
+          <label>S3 prefix (folder in bucket)</label>
+          <input id="bulk-prefix" placeholder="bulk-uploads/" />
+        </div>
+        <div>
+          <label>Concurrent uploads</label>
+          <input id="bulk-concurrency" type="number" value="3" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Building (applied to all)</label>
+          <input id="bulk-building" placeholder="site-a" />
+        </div>
+        <div>
+          <label>Shot date (YYYY-MM-DD, applied to all)</label>
+          <input id="bulk-date" placeholder="2025-01-01" />
+        </div>
+      </div>
+      <label>Notes (applied to all)</label>
+      <textarea id="bulk-notes" rows="2"></textarea>
+      <label>Select a folder of images</label>
+      <input id="bulk-input" type="file" webkitdirectory multiple />
+      <button onclick="bulkUpload()">Start bulk upload</button>
+      <pre id="bulk-log"></pre>
+    </fieldset>
+
+    <script>
+      function logBulk(msg) {
+        const el = document.getElementById('bulk-log');
+        el.textContent += msg + "\n";
+        el.scrollTop = el.scrollHeight;
+      }
+
+      async function presignOne(key, contentType) {
+        const r = await fetch('/api/presign-upload', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({key, content_type: contentType || 'image/jpeg'})});
+        if (!r.ok) throw new Error('presign failed ' + r.status);
+        return r.json();
+      }
+
+      async function putToS3(url, file, contentType) {
+        const r = await fetch(url, {method: 'PUT', headers: {'Content-Type': contentType || 'application/octet-stream'}, body: file});
+        if (!r.ok) throw new Error('s3 put failed ' + r.status);
+      }
+
+      async function upsertOne(id, s3_key, building, shot_date, notes) {
+        const r = await fetch('/api/images/upsert-s3', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id, s3_key, building, shot_date, notes})});
+        if (!r.ok) throw new Error('upsert failed ' + r.status);
+        return r.json();
+      }
+
+      async function bulkUpload() {
+        const files = Array.from(document.getElementById('bulk-input').files || []);
+        if (!files.length) { logBulk('No files selected.'); return; }
+        const prefix = (document.getElementById('bulk-prefix').value || '').trim();
+        const building = (document.getElementById('bulk-building').value || '').trim();
+        const shot_date = (document.getElementById('bulk-date').value || '').trim();
+        const notes = document.getElementById('bulk-notes').value || '';
+        const concurrency = Math.max(1, parseInt(document.getElementById('bulk-concurrency').value || '3', 10));
+
+        logBulk(`Starting bulk: ${files.length} files, prefix="${prefix}"`);
+
+        let idx = 0;
+        let inFlight = 0;
+        let done = 0;
+
+        return new Promise((resolve) => {
+          const next = () => {
+            if (idx >= files.length && inFlight === 0) { logBulk('Bulk completed.'); resolve(); return; }
+            while (inFlight < concurrency && idx < files.length) {
+              const file = files[idx++];
+              inFlight++;
+              (async () => {
+                try {
+                  if (!file.type.startsWith('image/')) { logBulk(`Skip non-image: ${file.name}`); return; }
+                  const rel = file.webkitRelativePath || file.name;
+                  const key = (prefix ? prefix.replace(/\/+$/,'') + '/' : '') + rel.replace(/^\/+/, '');
+                  logBulk(`Presign: ${key}`);
+                  const ps = await presignOne(key, file.type);
+                  await putToS3(ps.url, file, file.type);
+                  const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(16).slice(2));
+                  await upsertOne(id, key, building, shot_date, notes);
+                  done++;
+                  logBulk(`OK (${done}/${files.length}): ${rel}`);
+                } catch (e) {
+                  logBulk(`ERR: ${e && e.message ? e.message : e}`);
+                } finally {
+                  inFlight--;
+                  next();
+                }
+              })();
+            }
+          };
+          next();
+        });
+      }
+    </script>
   </body>
   </html>
 
