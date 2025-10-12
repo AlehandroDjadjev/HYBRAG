@@ -92,7 +92,6 @@
         </div>
       </div>
       <button onclick="search()">Search</button>
-      <pre id="search-raw"></pre>
       <div class="results" id="search-results"></div>
     </fieldset>
 
@@ -133,17 +132,18 @@
         const url = '/api/search?' + params.toString();
         const r = await fetch(url);
         const j = await r.json();
-        document.getElementById('search-raw').textContent = JSON.stringify(j, null, 2);
         const box = document.getElementById('search-results');
         box.innerHTML = '';
-        const arr = (j && j.results) || [];
-        for (const it of arr) {
+        const arr = ((j && j.results) || []).slice();
+        arr.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+        arr.forEach((it, idx) => {
           const card = document.createElement('div');
           card.className = 'card';
           const imgUrl = it.image_url || '';
-          card.innerHTML = `<img class="img" src="${imgUrl}" alt=""/>\n<div><b>${it.building || ''}</b> | ${it.shot_date || ''}</div>\n<div>score: ${Number(it.score || 0).toFixed(3)}</div>\n<div>${(it.notes||'').slice(0,120)}</div>`;
+          const rank = idx + 1;
+          card.innerHTML = `<img class="img" src="${imgUrl}" alt=""/>\n<div><b>#${rank}</b> — score: ${Number(it.score || 0).toFixed(3)}</div>\n<div><b>${it.building || ''}</b> | ${it.shot_date || ''}</div>\n<div>${(it.notes||'').slice(0,120)}</div>`;
           box.appendChild(card);
-        }
+        });
       }
     </script>
 
