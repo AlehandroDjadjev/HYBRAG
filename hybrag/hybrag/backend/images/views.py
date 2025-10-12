@@ -128,6 +128,7 @@ class UpsertViaS3View(APIView):
 		if not (item_id and s3_key and building and shot_date):
 			return Response({"detail": "id, s3_key, building, shot_date required"}, status=400)
 
+		# Generate embedding using a fresh presigned URL, but store only stable s3_key in the index
 		img_url = presign_get(s3_key)
 		vec = get_siglip()._invoke({"image_url": img_url, "normalize": True})
 		payload = {
@@ -135,11 +136,11 @@ class UpsertViaS3View(APIView):
 			"building": building,
 			"shot_date": str(shot_date),
 			"shot_ymd": int(str(shot_date).replace('-', '')) if isinstance(shot_date, str) else 0,
-			"image_url": img_url,
+			"s3_key": s3_key,
 			"notes": notes or "",
 		}
 		get_vectors().upsert(str(item_id), vec, payload, namespace=None)
-		return Response({"id": str(item_id), "image_url": img_url}, status=201)
+		return Response({"id": str(item_id), "image_url": img_url, "s3_key": s3_key}, status=201)
 
 
 class ImageSearchView(APIView):
@@ -173,8 +174,13 @@ class ImageSearchView(APIView):
 			query_vec, top_k=top_k, building=building, date_from=date_from, date_to=date_to, namespace=namespace
 		)
 		results = rerank_with_metadata_boost(results, building)
+		# Attach fresh presigned URLs for any result that has s3_key
 		for r in results:
-			if 'image_url' in r:
+			try:
+				s3k = r.get('s3_key')
+				if s3k:
+					r['image_url'] = presign_get(s3k)
+			except Exception:
 				pass
 		return Response({"results": results, "namespace": namespace or ''})
 
