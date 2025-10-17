@@ -21,9 +21,9 @@ run:
     - name: AWS_REGION
       value: eu-north-1
     - name: SAGEMAKER_ENDPOINT
-      value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
+      value: siglip2-async-endpoint
     - name: SAGEMAKER_ENDPOINT_NAME
-      value: huggingface-pytorch-inference-2025-10-05-07-17-53-005
+      value: siglip2-async-endpoint
     - name: SAGEMAKER_RUNTIME_REGION
       value: eu-north-1
     - name: SAGEMAKER_ASYNC
