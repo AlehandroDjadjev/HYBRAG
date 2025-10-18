@@ -11,7 +11,7 @@ This repo contains a Django REST API (backend) and a minimal Next.js app (fronte
   - Local file storage for images under `MEDIA/` (development)
   - SQLite for canonical records (development)
 - Vector DB: Pinecone (managed)
-- Embeddings: SigLIP via Hugging Face Transformers (`google/siglip-base-patch16-224`)
+- Embeddings: SigLIP via Hugging Face Transformers (`google/siglip-base-patch16-4`)
 - Frontend: Next.js (minimal UI to ingest and search)
 
 ## Project layout

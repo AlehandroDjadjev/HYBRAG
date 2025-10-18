@@ -130,3 +130,8 @@ OS_USE_IAM = os.getenv('OS_USE_IAM', '1') == '1'
 OS_INDEX = os.getenv('OS_INDEX', 'media-embeddings')
 OS_EMB_DIM = int(os.getenv('OS_EMB_DIM', '1536'))
 OS_K = int(os.getenv('OS_K', '10'))
+
+# S3 Vector DB
+VECTOR_S3_BUCKET = os.getenv('VECTOR_S3_BUCKET', 'google-siglip2-giant-opt-patch16-384-vector-db')
+VECTOR_S3_INDEX = os.getenv('VECTOR_S3_INDEX', 'images')
+VECTOR_S3_PREFIX = os.getenv('VECTOR_S3_PREFIX', 'vectors/')

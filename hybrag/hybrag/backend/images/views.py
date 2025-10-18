@@ -35,11 +35,21 @@ def get_siglip():
 def get_vectors():
 	global _vectors
 	if _vectors is None:
-		from .vector.pinecone_store import VectorStore
-		_sig = get_siglip()
-		_vectors = VectorStore(
-			api_key='', environment=None, index_name=getattr(settings, 'OS_INDEX', 'media-embeddings'), dim=getattr(settings, 'OS_EMB_DIM', 1536), host=getattr(settings, 'OS_HOST', None),
-		)
+        try:
+            from .vector.s3_vector_store import S3VectorStore
+            _vectors = S3VectorStore(
+                bucket=getattr(settings, 'VECTOR_S3_BUCKET', None),
+                index_name=getattr(settings, 'VECTOR_S3_INDEX', 'images'),
+                dim=getattr(settings, 'OS_EMB_DIM', 1536),
+                prefix=getattr(settings, 'VECTOR_S3_PREFIX', 'vectors/'),
+                region=getattr(settings, 'AWS_REGION', None),
+            )
+        except Exception:
+            # Fallback: try OpenSearch if S3 setup fails
+            from .vector.pinecone_store import VectorStore
+            _vectors = VectorStore(
+                api_key='', environment=None, index_name=getattr(settings, 'OS_INDEX', 'media-embeddings'), dim=getattr(settings, 'OS_EMB_DIM', 1536), host=getattr(settings, 'OS_HOST', None),
+            )
 	return _vectors
 
 
