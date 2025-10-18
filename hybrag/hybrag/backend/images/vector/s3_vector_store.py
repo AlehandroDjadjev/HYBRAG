@@ -33,7 +33,7 @@ class S3VectorStore:
         self.index = index_name or os.getenv('VECTOR_S3_INDEX', 'images')
         self.dim = int(dim)
         self.prefix = (prefix or os.getenv('VECTOR_S3_PREFIX') or 'vectors/').strip('/')
-        region_name = region or os.getenv('AWS_REGION') or 'eu-north-1'
+        region_name = os.getenv('VECTOR_S3_REGION') or region or os.getenv('AWS_REGION') or 'eu-north-1'
         self.s3 = boto3.client('s3', config=Config(region_name=region_name, retries={"max_attempts": 3, "mode": "standard"}))
         # Detect actual bucket region and reinitialize client if needed
         try:
