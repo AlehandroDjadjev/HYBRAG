@@ -5,6 +5,7 @@ import json
 import math
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 
 def _cosine(a: List[float], b: List[float]) -> float:
@@ -34,6 +35,20 @@ class S3VectorStore:
         self.prefix = (prefix or os.getenv('VECTOR_S3_PREFIX') or 'vectors/').strip('/')
         region_name = region or os.getenv('AWS_REGION') or 'eu-north-1'
         self.s3 = boto3.client('s3', config=Config(region_name=region_name, retries={"max_attempts": 3, "mode": "standard"}))
+        # Detect actual bucket region and reinitialize client if needed
+        try:
+            loc = self.s3.get_bucket_location(Bucket=self.bucket)
+            bucket_region = 'us-east-1'
+            if bucket_region and bucket_region != region_name:
+                self.s3 = boto3.client('s3', config=Config(region_name=bucket_region, retries={"max_attempts": 3, "mode": "standard"}))
+        except ClientError as e:
+            code = (e.response or {}).get('Error', {}).get('Code')
+            if code == 'NoSuchBucket' and os.getenv('VECTOR_S3_CREATE', '0') == '1':
+                params = {"Bucket": self.bucket}
+                # For non-us-east-1, need LocationConstraint
+                if region_name != 'us-east-1':
+                    params["CreateBucketConfiguration"] = {"LocationConstraint": region_name}
+                self.s3.create_bucket(**params)
 
     def _key_for_id(self, point_id: str) -> str:
         return f"{self.prefix}/{self.index}/{point_id}.json"
@@ -68,7 +83,13 @@ class S3VectorStore:
         prefix = f"{self.prefix}/{self.index}/"
         token = None
         while True:
-            res = self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix, ContinuationToken=token) if token else self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            try:
+                res = self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix, ContinuationToken=token) if token else self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            except ClientError as e:
+                code = (e.response or {}).get('Error', {}).get('Code')
+                if code == 'NoSuchBucket':
+                    return []
+                raise
             contents = res.get('Contents') or []
             if contents:
                 objs = [{"Key": it['Key']} for it in contents]

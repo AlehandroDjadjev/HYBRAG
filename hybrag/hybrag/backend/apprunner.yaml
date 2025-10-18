@@ -55,6 +55,16 @@ run:
     - name: S3_BUCKET
       value: sagemaker-eu-north-1-050608054893
 
+    # ---- S3 Vector DB ----
+    - name: VECTOR_S3_BUCKET
+      value: google-siglip2-giant-opt-patch16-384-vector-db
+    - name: VECTOR_S3_INDEX
+      value: images
+    - name: VECTOR_S3_PREFIX
+      value: vectors/
+    - name: VECTOR_S3_CREATE
+      value: "0"
+
     # ---- Pinecone ----
     - name: PINECONE_API_KEY
       value: "pcsk_41ubyE_GdMssC1R7owbZvZT3u9bNkhF58kBPSV2sgYp9fBERLC2bEDfY5dCk9dNXE7B5vF"
@@ -70,17 +80,18 @@ run:
       value: "us-east-1"
 
     # ---- OpenSearch ----
+    # (disabled by default when using S3 Vector DB)
     - name: OS_HOST
-      value: "https://search-siglip2-vector-db-7jnv3kowdvqnduws3oo2ccsdrm.aos.us-east-1.on.aws"
+      value: ""
     - name: OS_REGION
-      value: "us-east-1"
+      value: ""
     - name: OS_USE_IAM
       value: "0"
     - name: OS_USERNAME
-      value: "opensearch"
+      value: ""
     - name: OS_PASSWORD
-      value: "Opensearch123!"
+      value: ""
     - name: OS_INDEX
-      value: "media-embeddings"
+      value: ""
     - name: OS_EMB_DIM
       value: "1536"
