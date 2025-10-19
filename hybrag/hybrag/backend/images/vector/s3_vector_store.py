@@ -38,9 +38,10 @@ class S3VectorStore:
         # Detect actual bucket region and reinitialize client if needed
         try:
             loc = self.s3.get_bucket_location(Bucket=self.bucket)
-            bucket_region = 'us-east-1'
+            bucket_region = (loc.get('LocationConstraint') or 'us-east-1') if isinstance(loc, dict) else 'us-east-1'
             if bucket_region and bucket_region != region_name:
                 self.s3 = boto3.client('s3', config=Config(region_name=bucket_region, retries={"max_attempts": 3, "mode": "standard"}))
+                region_name = bucket_region
         except ClientError as e:
             code = (e.response or {}).get('Error', {}).get('Code')
             if code == 'NoSuchBucket' and os.getenv('VECTOR_S3_CREATE', '0') == '1':
@@ -49,6 +50,8 @@ class S3VectorStore:
                 if region_name != 'us-east-1':
                     params["CreateBucketConfiguration"] = {"LocationConstraint": region_name}
                 self.s3.create_bucket(**params)
+        # Debug: initialization summary
+        print(f"[S3VectorStore:init] bucket={self.bucket} region={region_name} index={self.index} prefix={self.prefix} dim={self.dim}")
 
     def _key_for_id(self, point_id: str) -> str:
         return f"{self.prefix}/{self.index}/{point_id}.json"
@@ -58,7 +61,9 @@ class S3VectorStore:
             raise ValueError(f"Vector length {len(vector)} != dim {self.dim}")
         doc = {"id": point_id, **payload, "embedding": vector}
         body = json.dumps(doc).encode('utf-8')
-        self.s3.put_object(Bucket=self.bucket, Key=self._key_for_id(point_id), Body=body, ContentType='application/json')
+        key = self._key_for_id(point_id)
+        print(f"[S3VectorStore:upsert] bucket={self.bucket} key={key} id={point_id}")
+        self.s3.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType='application/json')
 
     def upsert_batch(self, items: List[Dict[str, Any]], namespace: Optional[str] = None) -> None:
         for it in items:
@@ -81,6 +86,7 @@ class S3VectorStore:
 
     def delete_all(self, namespace: Optional[str] = None) -> None:
         prefix = f"{self.prefix}/{self.index}/"
+        print(f"[S3VectorStore:delete_all] bucket={self.bucket} prefix={prefix}")
         token = None
         while True:
             try:
@@ -109,18 +115,31 @@ class S3VectorStore:
         namespace: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         prefix = f"{self.prefix}/{self.index}/"
+        print(f"[S3VectorStore:search] bucket={self.bucket} prefix={prefix} top_k={top_k} filters={{'building': {building}, 'date_from': {date_from}, 'date_to': {date_to}}}")
         token = None
         best: List[Dict[str, Any]] = []
+        scanned = 0
         # Linear scan (sufficient for small-mid datasets); for large sets consider shard/manifest
         while True:
-            res = self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix, ContinuationToken=token) if token else self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            try:
+                res = self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix, ContinuationToken=token) if token else self.s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            except ClientError as e:
+                code = (e.response or {}).get('Error', {}).get('Code')
+                print(f"[S3VectorStore:search] list_objects_v2 error code={code} resp={getattr(e, 'response', None)}")
+                if code == 'NoSuchBucket':
+                    return []
+                raise
             contents = res.get('Contents') or []
+            if contents:
+                preview = [it.get('Key') for it in contents[:5]]
+                print(f"[S3VectorStore:search] listed count={len(contents)} preview={preview}")
             for obj in contents:
                 b = self.s3.get_object(Bucket=self.bucket, Key=obj['Key'])
                 try:
                     doc = json.loads(b['Body'].read())
                 except Exception:
                     continue
+                scanned += 1
                 # Filters
                 if building and doc.get('building') != building:
                     continue
@@ -148,6 +167,8 @@ class S3VectorStore:
                 break
             token = res.get('NextContinuationToken')
         best.sort(key=lambda x: float(x.get('score') or 0.0), reverse=True)
-        return best[:max(1, int(top_k))]
+        out = best[:max(1, int(top_k))]
+        print(f"[S3VectorStore:search] scanned={scanned} returned={len(out)}")
+        return out
 
 
