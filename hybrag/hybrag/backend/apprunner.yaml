@@ -57,13 +57,13 @@ run:
 
     # ---- S3 Vector DB ----
     - name: VECTOR_S3_BUCKET
-      value: google-siglip2-giant-opt-patch16-384-vector-db
+      value: "google-siglip2-giant-opt-patch16-384-vector-db"
     - name: VECTOR_S3_REGION
-      value: us-east-1
+      value: "us-east-1"
     - name: VECTOR_S3_INDEX
-      value: images
+      value: "images"
     - name: VECTOR_S3_PREFIX
-      value: vectors/
+      value: "vectors/""
     - name: VECTOR_S3_CREATE
       value: "0"
 
