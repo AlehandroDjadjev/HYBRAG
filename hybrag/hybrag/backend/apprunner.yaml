@@ -63,7 +63,7 @@ run:
     - name: VECTOR_S3_INDEX
       value: "images"
     - name: VECTOR_S3_PREFIX
-      value: "vectors/""
+      value: "vectors/"
     - name: VECTOR_S3_CREATE
       value: "0"
 
