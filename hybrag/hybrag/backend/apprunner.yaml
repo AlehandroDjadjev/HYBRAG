@@ -66,6 +66,8 @@ run:
       value: "vectors/"
     - name: VECTOR_S3_CREATE
       value: "0"
+    - name: VECTOR_S3_IS_VECTOR_BUCKET
+      value: "1"
 
     # ---- Pinecone ----
     - name: PINECONE_API_KEY
