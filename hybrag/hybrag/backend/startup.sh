@@ -1,1 +1,1 @@
-python manage.py collectstatic --noinput && gunicorn -c gunicorn.conf.py
+python3 manage.py collectstatic --noinput && gunicorn -c gunicorn.conf.py
