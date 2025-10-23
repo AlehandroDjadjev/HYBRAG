@@ -5,9 +5,9 @@ build:
   commands:
     pre-build:
       - python3 -V
-      - python3 -m pip install --upgrade pip setuptools wheel
+      - pip3 install --upgrade pip setuptools wheel
     build:
-      - python3 -m pip install -r requirements.txt
+      - pip3 install -r requirements.txt
 
 run:
   # Don't pin runtime-version; let App Runner pick latest 3.11.x
