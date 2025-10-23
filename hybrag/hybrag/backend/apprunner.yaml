@@ -4,12 +4,13 @@ runtime: python311
 build:
   commands:
     pre-build:
-      - python3 -m pip3 install --upgrade pip3 setuptools wheel
+      - python3 -V
+      - python3 -m pip install --upgrade pip setuptools wheel
     build:
-      - pip3 install -r requirements.txt
+      - python3 -m pip install -r requirements.txt
 
 run:
-  # omit runtime-version to avoid pinning to a patch not rolled out yet
+  # Don't pin runtime-version; let App Runner pick latest 3.11.x
   command: sh startup.sh
   network:
     port: 8000
