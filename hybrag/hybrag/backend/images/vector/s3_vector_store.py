@@ -59,7 +59,7 @@ class S3VectorStore:
                 self.s3.create_bucket(**params)
         # Initialize S3 Vectors client in same region as bucket when possible
         try:
-            self.s3vectors = boto3.client('s3vectors', region_name=bucket_region or region_name)
+            self.s3vectors = boto3.client('s3vectors', region_name="us-east-1")
         except Exception as e:
             # In vector-bucket mode this is a fatal error (SDK too old or region mismatch)
             if self.vector_mode:
