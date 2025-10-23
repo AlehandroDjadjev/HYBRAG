@@ -4,9 +4,9 @@ runtime: python311
 build:
   commands:
     pre-build:
-      - python -m pip install --upgrade pip setuptools wheel
+      - python3 -m pip3 install --upgrade pip3 setuptools wheel
     build:
-      - pip install -r requirements.txt
+      - pip3 install -r requirements.txt
 
 run:
   # omit runtime-version to avoid pinning to a patch not rolled out yet
