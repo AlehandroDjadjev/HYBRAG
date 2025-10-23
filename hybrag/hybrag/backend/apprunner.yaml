@@ -7,7 +7,7 @@ build:
       - pip install -r requirements.txt
 
 run:
-  runtime-version: 3.11
+  runtime-version: 3.11.13
   command: sh startup.sh
   network:
     port: 8000
