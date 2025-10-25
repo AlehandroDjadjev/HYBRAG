@@ -25,9 +25,13 @@ run:
     - name: AWS_REGION
       value: eu-north-1
     - name: SAGEMAKER_ENDPOINT
-      value: siglip2-async-endpoint
+      value: siglip2-realtime-cpu-c0b6ee09
     - name: SAGEMAKER_ENDPOINT_NAME
-      value: siglip2-async-endpoint
+      value: siglip2-realtime-cpu-c0b6ee09
+    - name: SAGEMAKER_TEXT_ENDPOINT_NAME
+      value: siglip2-realtime-cpu-c0b6ee09
+    - name: SAGEMAKER_IMAGE_ENDPOINT_NAME
+      value: siglip2-async-gpu-3df37997
     - name: SAGEMAKER_RUNTIME_REGION
       value: eu-north-1
     - name: SAGEMAKER_ASYNC

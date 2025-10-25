@@ -68,13 +68,16 @@ class SiglipService:
 	def __init__(self, model_name: str | None = None, device: str | None = None):
 		# Ignore local model; use SageMaker endpoint per settings
 		self.dim = int(getattr(settings, 'OS_EMB_DIM', 1536))
-		endpoint = getattr(settings, 'SAGEMAKER_ENDPOINT_NAME', None)
+		# Support separate endpoints for text (realtime) and image (async)
+		text_ep = getattr(settings, 'SAGEMAKER_TEXT_ENDPOINT_NAME', None) or getattr(settings, 'SAGEMAKER_ENDPOINT_NAME', None)
+		image_ep = getattr(settings, 'SAGEMAKER_IMAGE_ENDPOINT_NAME', None) or getattr(settings, 'SAGEMAKER_ENDPOINT_NAME', None)
 		region = getattr(settings, 'SAGEMAKER_RUNTIME_REGION', None) or getattr(settings, 'AWS_REGION', None)
-		if not endpoint:
-			raise RuntimeError('SAGEMAKER_ENDPOINT_NAME not set')
+		if not text_ep and not image_ep:
+			raise RuntimeError('SAGEMAKER_TEXT_ENDPOINT_NAME or SAGEMAKER_IMAGE_ENDPOINT_NAME (or SAGEMAKER_ENDPOINT_NAME) must be set')
 		if not region:
 			raise RuntimeError('SAGEMAKER_RUNTIME_REGION or AWS_REGION not set')
-		self.endpoint = endpoint
+		self.text_endpoint = text_ep
+		self.image_endpoint = image_ep
 		self.client = boto3.client(
 			'sagemaker-runtime',
 			config=Config(
@@ -88,8 +91,13 @@ class SiglipService:
 		self.use_async = True
 
 	def _invoke(self, payload: dict) -> list[float]:
-		# If explicitly configured for async, use async path
-		if self.use_async:
+		# Route by payload: text -> realtime endpoint, image -> async endpoint
+		is_image = any(k in payload for k in ("image_url", "image_urls"))
+		if is_image:
+			endpoint_name = self.image_endpoint
+			if not endpoint_name:
+				raise RuntimeError('SAGEMAKER_IMAGE_ENDPOINT_NAME not configured')
+			# Async invocation flow for image embeddings
 			bucket = getattr(settings, 'ASYNC_S3_INPUT_BUCKET', None) or getattr(settings, 'S3_BUCKET', None)
 			prefix = getattr(settings, 'ASYNC_S3_INPUT_PREFIX', 'siglip2-async-inputs/')
 			if not bucket:
@@ -98,7 +106,7 @@ class SiglipService:
 			self.s3.put_object(Bucket=bucket, Key=key, Body=json.dumps(payload).encode('utf-8'), ContentType='application/json')
 			in_loc = f"s3://{bucket}/{key}"
 			resp_async = self.client.invoke_endpoint_async(
-				EndpointName=self.endpoint,
+				EndpointName=endpoint_name,
 				InputLocation=in_loc,
 				ContentType='application/json',
 			)
@@ -139,6 +147,21 @@ class SiglipService:
 					last_err = str(pe)
 				time.sleep(2)
 			raise RuntimeError(last_err or 'Timed out waiting for async output')
+		# Realtime invocation for text embeddings
+		endpoint_name = self.text_endpoint
+		if not endpoint_name:
+			raise RuntimeError('SAGEMAKER_TEXT_ENDPOINT_NAME not configured')
+		resp = self.client.invoke_endpoint(
+			EndpointName=endpoint_name,
+			ContentType='application/json',
+			Accept='application/json',
+			Body=json.dumps(payload).encode('utf-8'),
+		)
+		body = json.loads(resp['Body'].read())
+		vec = _extract_embedding_from_data(body) or body.get('embedding')
+		if not isinstance(vec, list):
+			raise RuntimeError(f'Bad response from SageMaker endpoint: {body}')
+		return vec
 
 		# Try real-time first, fallback to async if the endpoint rejects it
 		try:
