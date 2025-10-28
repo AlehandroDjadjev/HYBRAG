@@ -51,86 +51,86 @@
   </head>
   <body>
     <div class="topbar">
-      <div class="brand">HYBRAG <b>Console</b></div>
+      <div class="brand">HYBRAG <b>Media Finder</b></div>
       <div class="badge">v1</div>
     </div>
 
     <div class="layout">
       <div class="sidebar">
-        <button class="navbtn active" onclick="switchSection('sec-search', this)">Search</button>
-        <button class="navbtn" onclick="switchSection('sec-upsert', this)">Upsert</button>
-        <button class="navbtn" onclick="switchSection('sec-bulk', this)">Bulk Upload</button>
+        <button class="navbtn active" onclick="switchSection('sec-search', this)">Find Images</button>
+        <button class="navbtn" onclick="switchSection('sec-upsert', this)">Add One Image</button>
+        <button class="navbtn" onclick="switchSection('sec-bulk', this)">Add Many Images</button>
       </div>
 
       <div class="content">
         <section id="sec-search" class="card">
-          <h2>Search</h2>
+          <h2>Find Images</h2>
           <div class="row">
             <div>
-              <label>Query text</label>
-              <input id="search-q" placeholder="e.g., white dog" />
+              <label>Describe what you’re looking for</label>
+              <input id="search-q" placeholder="e.g., red brick wall, tower crane" />
             </div>
             <div>
-              <label>Building filter</label>
-              <input id="search-building" placeholder="site-a (optional)" />
+              <label>Project / Building (optional)</label>
+              <input id="search-building" placeholder="e.g., Site A" />
             </div>
           </div>
           <div class="row">
             <div>
-              <label>Date from</label>
+              <label>From date (optional)</label>
               <input id="search-date-from" type="date" />
             </div>
             <div>
-              <label>Date to</label>
+              <label>To date (optional)</label>
               <input id="search-date-to" type="date" />
             </div>
           </div>
           <div class="row">
             <div>
-              <label>Top K</label>
+              <label>Number of results</label>
               <input id="search-k" type="number" value="5" />
             </div>
             <div>
-              <label>Namespace (optional)</label>
-              <input id="search-namespace" />
+              <label>Group (advanced)</label>
+              <input id="search-namespace" placeholder="Leave empty unless instructed" />
             </div>
           </div>
-          <button class="btn" onclick="search()">Search</button>
+          <button class="btn" onclick="search()">Search now</button>
           <div class="results" id="search-results"></div>
         </section>
 
         <section id="sec-upsert" class="card hidden">
-          <h2>Upsert via S3</h2>
+          <h2>Add one image</h2>
           <div class="row">
             <div>
-              <label>Item ID</label>
+              <label>Image ID (auto-generate or paste your own)</label>
               <div class="inline" style="width:100%">
                 <input id="upsert-id" placeholder="uuid-or-string" style="flex:1" />
                 <button class="btn secondary" type="button" onclick="genId()">Generate</button>
               </div>
             </div>
             <div>
-              <label>S3 key (already uploaded)</label>
-              <input id="upsert-key" placeholder="uploads/example.jpg" />
+              <label>Select image file from your computer</label>
+              <input id="single-file" type="file" accept="image/*" />
             </div>
           </div>
           <div class="row">
             <div>
-              <label>Building</label>
-              <input id="upsert-building" placeholder="site-a" />
+              <label>Project / Building</label>
+              <input id="upsert-building" placeholder="e.g., Site A" />
             </div>
             <div>
-              <label>Shot date</label>
+              <label>Photo date</label>
               <input id="upsert-date" type="date" />
             </div>
           </div>
-          <label>Notes</label>
+          <label>Notes (optional)</label>
           <textarea id="upsert-notes" rows="2"></textarea>
-          <button class="btn" onclick="upsert()">Upsert</button>
+          <button class="btn" onclick="upsert()">Add image</button>
           <div class="logbox" id="upsert-out"></div>
 
           <details>
-            <summary>Advanced: Presign single file (optional)</summary>
+            <summary>Advanced options</summary>
             <div class="row">
               <div>
                 <label>S3 key (path/filename.jpg)</label>
@@ -151,32 +151,32 @@
         </section>
 
         <section id="sec-bulk" class="card hidden">
-          <h2>Bulk upload (select folder)</h2>
+          <h2>Add many images</h2>
           <div class="row">
             <div>
-              <label>S3 prefix (folder in bucket)</label>
-              <input id="bulk-prefix" placeholder="bulk-uploads/" />
+              <label>Folder name in cloud (optional)</label>
+              <input id="bulk-prefix" placeholder="auto picks folder names if empty" />
             </div>
             <div>
-              <label>Concurrent uploads</label>
+              <label>How many to upload at once</label>
               <input id="bulk-concurrency" type="number" value="3" />
             </div>
           </div>
           <div class="row">
             <div>
-              <label>Building (applied to all)</label>
-              <input id="bulk-building" placeholder="site-a" />
+              <label>Project / Building (for all)</label>
+              <input id="bulk-building" placeholder="e.g., Site A" />
             </div>
             <div>
-              <label>Shot date (applied to all)</label>
+              <label>Photo date (for all)</label>
               <input id="bulk-date" type="date" />
             </div>
           </div>
-          <label>Notes (applied to all)</label>
+          <label>Notes (for all, optional)</label>
           <textarea id="bulk-notes" rows="2"></textarea>
-          <label>Select a folder of images</label>
+          <label>Select a folder of images from your computer</label>
           <input id="bulk-input" type="file" webkitdirectory multiple />
-          <button class="btn" onclick="bulkUpload()">Start bulk upload</button>
+          <button class="btn" onclick="bulkUpload()">Start upload</button>
           <div class="logbox" id="bulk-log"></div>
         </section>
       </div>
@@ -207,11 +207,17 @@
 
       async function upsert() {
         const id = document.getElementById('upsert-id').value.trim();
-        const s3_key = document.getElementById('upsert-key').value.trim();
+        const file = (document.getElementById('single-file').files || [])[0];
         const building = document.getElementById('upsert-building').value.trim();
         const shot_date = document.getElementById('upsert-date').value.trim();
         const notes = document.getElementById('upsert-notes').value;
-        const r = await fetch('/api/images/upsert-s3', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id, s3_key, building, shot_date, notes})});
+        if (!file) { document.getElementById('upsert-out').textContent = 'Please choose an image file.'; return; }
+        const form = new FormData();
+        form.append('file', file);
+        form.append('building', building);
+        form.append('shot_date', shot_date);
+        form.append('notes', notes);
+        const r = await fetch('/api/images', {method:'POST', body: form});
         const j = await r.json();
         document.getElementById('upsert-out').textContent = JSON.stringify(j, null, 2);
       }
