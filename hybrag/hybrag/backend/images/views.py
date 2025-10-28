@@ -113,11 +113,35 @@ class ImageIngestView(APIView):
 		building = request.data.get('building')
 		shot_date = request.data.get('shot_date')
 		notes = request.data.get('notes', '')
-
 		if not (uploaded and building and shot_date):
 			return Response({"detail": "file, building, shot_date required"}, status=status.HTTP_400_BAD_REQUEST)
-
-		return Response({"detail": "Direct file uploads are deprecated. Use S3 presign flow and /api/images/upsert-s3."}, status=400)
+		# 1) Persist locally via Django storage
+		from .models import ImageItem
+		item = ImageItem(file=uploaded, building=building, shot_date=shot_date, notes=notes or "")
+		item.save()
+		# 2) Upload the saved file to S3 under a stable key
+		from django.utils.text import slugify
+		import os as _os
+		ext = _os.path.splitext(getattr(uploaded, 'name', '') or '')[1] or '.jpg'
+		s3_key = f"images/{slugify(str(item.building))}/{str(item.id)}{ext}"
+		s3 = boto3.client('s3', config=Config(region_name=getattr(settings, 'AWS_REGION', None)))
+		with item.file.open('rb') as fh:
+			s3.put_object(Bucket=getattr(settings, 'S3_BUCKET', ''), Key=s3_key, Body=fh.read(), ContentType=getattr(uploaded, 'content_type', 'image/jpeg'))
+		# 3) Generate a presigned GET URL for embedding
+		img_url = presign_get(s3_key)
+		# 4) Embed via async image endpoint (SiglipService selects async for image_url)
+		vec = get_siglip()._invoke({"image_url": img_url, "normalize": True})
+		# 5) Upsert into vector store with S3 key metadata for retrieval
+		payload = {
+			"id": str(item.id),
+			"building": building,
+			"shot_date": str(shot_date),
+			"shot_ymd": int(str(shot_date).replace('-', '')) if isinstance(shot_date, str) else 0,
+			"s3_key": s3_key,
+			"notes": notes or "",
+		}
+		get_vectors().upsert(str(item.id), vec, payload, namespace=None)
+		return Response({"id": str(item.id), "image_url": img_url, "s3_key": s3_key}, status=201)
 
 
 class ImageBatchIngestView(APIView):

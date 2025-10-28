@@ -87,8 +87,36 @@ class SiglipService:
 				connect_timeout=3,
 			)
 		)
+		# Control-plane client for endpoint readiness polling
+		self.sm = boto3.client('sagemaker', config=Config(region_name=region, retries={"max_attempts": 3, "mode": "standard"}))
 		self.s3 = boto3.client('s3', config=Config(region_name=getattr(settings, 'AWS_REGION', region)))
 		self.use_async = True
+
+	def _wait_for_endpoint_min_instances(self, endpoint_name: str, min_instances: int = 1, max_wait_seconds: int = 1200, interval_seconds: int = 300) -> None:
+		"""Polls SageMaker endpoint until it's InService and (if available) has >= min_instances.
+		Checks every interval_seconds, up to max_wait_seconds (~20 minutes by default).
+		"""
+		start = time.time()
+		last_status = ''
+		while time.time() - start < max_wait_seconds:
+			try:
+				info = self.sm.describe_endpoint(EndpointName=endpoint_name)
+				status = info.get('EndpointStatus') or ''
+				last_status = status
+				# If AWS exposes current instance counts on variants, honor it; otherwise rely on InService
+				variants = info.get('ProductionVariants') or []
+				current_instances = 0
+				for v in variants:
+					try:
+						current_instances = max(current_instances, int(v.get('CurrentInstanceCount') or 0))
+					except Exception:
+						pass
+				if status == 'InService' and (current_instances == 0 or current_instances >= min_instances):
+					return
+			except Exception:
+				pass
+			time.sleep(interval_seconds)
+		raise RuntimeError(f"Endpoint {endpoint_name} not ready after {max_wait_seconds}s (last status={last_status})")
 
 	def _invoke(self, payload: dict) -> list[float]:
 		# Route by payload: text -> realtime endpoint, image -> async endpoint
@@ -97,6 +125,12 @@ class SiglipService:
 			endpoint_name = self.image_endpoint
 			if not endpoint_name:
 				raise RuntimeError('SAGEMAKER_IMAGE_ENDPOINT_NAME not configured')
+			# Wait for endpoint readiness (every 5 minutes, up to ~20 minutes)
+			try:
+				self._wait_for_endpoint_min_instances(endpoint_name, min_instances=1, max_wait_seconds=1200, interval_seconds=300)
+			except Exception:
+				# Proceed to invoke anyway; downstream retry will attempt short backoff
+				pass
 			# Async invocation flow for image embeddings
 			bucket = getattr(settings, 'ASYNC_S3_INPUT_BUCKET', None) or getattr(settings, 'S3_BUCKET', None)
 			prefix = getattr(settings, 'ASYNC_S3_INPUT_PREFIX', 'siglip2-async-inputs/')
@@ -111,6 +145,22 @@ class SiglipService:
 				ContentType='application/json',
 			)
 			out_loc = resp_async.get('OutputLocation')
+			# If the endpoint is cold or has 0 instances, briefly retry invoke until it accepts
+			if not out_loc:
+				start = time.time()
+				while time.time() - start < 60:
+					try:
+						resp_async = self.client.invoke_endpoint_async(
+							EndpointName=endpoint_name,
+							InputLocation=in_loc,
+							ContentType='application/json',
+						)
+						out_loc = resp_async.get('OutputLocation')
+						if out_loc:
+							break
+					except Exception:
+						pass
+					time.sleep(2)
 			if out_loc:
 				out_bucket, out_key = _parse_s3_uri(out_loc)
 			else:
